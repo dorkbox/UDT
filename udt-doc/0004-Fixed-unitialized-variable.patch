@@ -1,0 +1,25 @@
+From fc0f8e2f8f8abeae9cd71a4fe9c0244981e12d64 Mon Sep 17 00:00:00 2001
+From: nathan <nathan@dorkbox.com>
+Date: Fri, 9 Jan 2015 01:22:45 +0100
+Subject: [PATCH 4/5] Fixed unitialized variable
+
+---
+ JavaLauncherApp/src/udt/core.cpp | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/JavaLauncherApp/src/udt/core.cpp b/JavaLauncherApp/src/udt/core.cpp
+index c1c8d03..a5acfa7 100644
+--- a/JavaLauncherApp/src/udt/core.cpp
++++ b/JavaLauncherApp/src/udt/core.cpp
+@@ -2285,7 +2285,7 @@ int CUDT::packData(CPacket& packet, uint64_t& ts)
+       if (offset < 0)
+          return 0;
+ 
+-      int msglen;
++      int msglen = 0;
+ 
+       payload = m_pSndBuffer->readData(&(packet.m_pcData), offset, packet.m_iMsgNo, msglen);
+ 
+-- 
+1.9.1
+

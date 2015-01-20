@@ -1,0 +1,73 @@
+From 60a91b17be591edad3c10df0b26d45c79dff7def Mon Sep 17 00:00:00 2001
+From: nathan <nathan@dorkbox.com>
+Date: Thu, 8 Jan 2015 23:31:27 +0100
+Subject: [PATCH 3/5] Code polish. removed unnecessary preprocessor symbols
+
+---
+ JavaLauncherApp/make_common.mak |  5 +----
+ JavaLauncherApp/src/common.c    | 10 +++++-----
+ 2 files changed, 6 insertions(+), 9 deletions(-)
+
+diff --git a/JavaLauncherApp/make_common.mak b/JavaLauncherApp/make_common.mak
+index 65536b0..1b55a95 100644
+--- a/JavaLauncherApp/make_common.mak
++++ b/JavaLauncherApp/make_common.mak
+@@ -181,11 +181,8 @@ ifeq ($(COMPILE_OS_ARCH),32)
+     PROGRAM_PATH+=bin/$(DIST_OS_NAME)
+   endif
+ 
+-
+-  #udt config
+-  FLAGS +=-DIA32
+ else ifeq ($(COMPILE_OS_ARCH),64) 
+-  FLAGS +=-DAMD64 -D_AMD64_ -D__AMD64__
++  FLAGS +=-DAMD64
+   M_ARCH=-m64
+   DIST_OS_NAME=$(COMPILE_OS)_64
+ 
+diff --git a/JavaLauncherApp/src/common.c b/JavaLauncherApp/src/common.c
+index 20f55ee..51a0e51 100644
+--- a/JavaLauncherApp/src/common.c
++++ b/JavaLauncherApp/src/common.c
+@@ -123,7 +123,7 @@ _TCHAR* findSymlinkCommand(_TCHAR* command, int resolve) {
+         else {
+             /* Get the directory PATH where executables reside. */
+             path = _tgetenv(_T_STRING("PATH"));
+-   			#ifdef WINDOWS
++            #ifdef WINDOWS
+             /* on windows, prepend the current directory */
+             if (path == NULL)
+                 path = _T_STRING("");
+@@ -133,7 +133,7 @@ _TCHAR* findSymlinkCommand(_TCHAR* command, int resolve) {
+             ch[length] = PATH_SEPARATOR;
+             _tcscpy(&ch[length + 1], path);
+             path = ch;
+-		    #endif
++            #endif
+             if (!path) {
+                 return NULL;
+             } else {
+@@ -306,9 +306,9 @@ _TCHAR* fixupPath(_TCHAR* path, _TCHAR* programDir, bool programDirFirst, bool a
+ }
+ 
+ _TCHAR * lastDirSeparator(_TCHAR* str) {
+-	#ifndef WINDOWS
++    #ifndef WINDOWS
+     return _tcsrchr(str, DIR_SEPARATOR);
+-	#else
++    #else
+     int i = -1;
+     _TCHAR * c = NULL;
+     while (str[++i] != 0) {
+@@ -316,7 +316,7 @@ _TCHAR * lastDirSeparator(_TCHAR* str) {
+             c = &str[i];
+     }
+     return c;
+-	#endif
++    #endif
+ }
+ 
+ _TCHAR * firstDirSeparator(_TCHAR* str) {
+-- 
+1.9.1
+

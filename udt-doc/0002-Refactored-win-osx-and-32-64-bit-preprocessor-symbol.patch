@@ -1,0 +1,1847 @@
+From 26f0153d5d6a099ea2138a567f5c7a0561d34a91 Mon Sep 17 00:00:00 2001
+From: nathan <nathan@dorkbox.com>
+Date: Thu, 8 Jan 2015 23:30:42 +0100
+Subject: [PATCH 2/5] Refactored win/osx and 32/64 bit preprocessor symbols.
+ Fixed unsigned/signed issue. Fixed typedef problem with mingw, pthreads, and
+ windows. Removed legacy/ms compiler code. Removed IA64 code
+
+---
+ JavaLauncherApp/src/udt/Makefile      |  58 -------------------
+ JavaLauncherApp/src/udt/api.cpp       |  62 ++++++++++----------
+ JavaLauncherApp/src/udt/api.h         |  28 ++++-----
+ JavaLauncherApp/src/udt/buffer.cpp    |   6 +-
+ JavaLauncherApp/src/udt/buffer.h      |   4 +-
+ JavaLauncherApp/src/udt/cache.cpp     |   6 +-
+ JavaLauncherApp/src/udt/cache.h       |   4 +-
+ JavaLauncherApp/src/udt/channel.cpp   |  26 ++++-----
+ JavaLauncherApp/src/udt/core.cpp      |  34 ++++++-----
+ JavaLauncherApp/src/udt/core.h        |  18 +++---
+ JavaLauncherApp/src/udt/epoll.cpp     |  18 +++---
+ JavaLauncherApp/src/udt/epoll.h       |   4 +-
+ JavaLauncherApp/src/udt/list.cpp      |  14 ++---
+ JavaLauncherApp/src/udt/list.h        |   4 +-
+ JavaLauncherApp/src/udt/packet.h      |   2 +-
+ JavaLauncherApp/src/udt/queue.cpp     |  62 ++++++++++----------
+ JavaLauncherApp/src/udt/queue.h       |  32 +++++------
+ JavaLauncherApp/src/udt/udt.h         |  50 +++-------------
+ JavaLauncherApp/src/udt/udtCommon.cpp | 104 ++++++++++++++++------------------
+ JavaLauncherApp/src/udt/udtCommon.h   |  49 ++++++++--------
+ JavaLauncherApp/src/udt/window.cpp    |   2 +-
+ JavaLauncherApp/src/udt/window.h      |   2 +-
+ 22 files changed, 241 insertions(+), 348 deletions(-)
+ delete mode 100644 JavaLauncherApp/src/udt/Makefile
+
+diff --git a/JavaLauncherApp/src/udt/Makefile b/JavaLauncherApp/src/udt/Makefile
+deleted file mode 100644
+index bc1e049..0000000
+--- a/JavaLauncherApp/src/udt/Makefile
++++ /dev/null
+@@ -1,58 +0,0 @@
+-C++ = g++
+-
+-ifndef os
+-   os = LINUX
+-endif
+-
+-ifndef arch
+-   arch = IA32
+-endif
+-
+-CCFLAGS = -fPIC -Wall -Wextra -D$(os) -finline-functions -O3 -fno-strict-aliasing -fvisibility=hidden
+-
+-ifeq ($(arch), IA32)
+-   CCFLAGS += -DIA32
+-endif
+-
+-ifeq ($(arch), POWERPC)
+-   CCFLAGS += -mcpu=powerpc
+-endif
+-
+-ifeq ($(arch), SPARC)
+-   CCFLAGS += -DSPARC
+-endif
+-
+-ifeq ($(arch), IA64)
+-   CCFLAGS += -DIA64
+-endif
+-
+-ifeq ($(arch), AMD64)
+-   CCFLAGS += -DAMD64
+-endif
+-
+-OBJS = api.o buffer.o cache.o ccc.o channel.o common.o core.o epoll.o list.o md5.o packet.o queue.o window.o
+-DIR = $(shell pwd)
+-
+-all: libudt.so libudt.a udt
+-
+-%.o: %.cpp %.h udt.h
+-	$(C++) $(CCFLAGS) $< -c
+-
+-libudt.so: $(OBJS)
+-ifneq ($(os), OSX)
+-	$(C++) -shared -o $@ $^
+-else
+-	$(C++) -dynamiclib -o libudt.dylib -lstdc++ -lpthread -lm $^
+-endif
+-
+-libudt.a: $(OBJS)
+-	ar -rcs $@ $^
+-
+-udt:
+-	cp udt.h udt
+-
+-clean:
+-	rm -f *.o *.so *.dylib *.a udt
+-
+-install:
+-	export LD_LIBRARY_PATH=$(DIR):$$LD_LIBRARY_PATH
+diff --git a/JavaLauncherApp/src/udt/api.cpp b/JavaLauncherApp/src/udt/api.cpp
+index 9db8cdb..72e7ecc 100644
+--- a/JavaLauncherApp/src/udt/api.cpp
++++ b/JavaLauncherApp/src/udt/api.cpp
+@@ -38,12 +38,10 @@ written by
+    Yunhong Gu, last updated 07/09/2011
+ *****************************************************************************/
+ 
+-#ifdef WIN32
++#ifdef WINDOWS
+    #include <winsock2.h>
+    #include <ws2tcpip.h>
+-   #ifdef LEGACY_WIN32
+-      #include <wspiapi.h>
+-   #endif
++   #include <wspiapi.h>
+ #else
+    #include <unistd.h>
+ #endif
+@@ -71,7 +69,7 @@ m_AcceptLock(),
+ m_uiBackLog(0),
+ m_iMuxID(-1)
+ {
+-   #ifndef WIN32
++   #ifndef WINDOWS
+       pthread_mutex_init(&m_AcceptLock, NULL);
+       pthread_cond_init(&m_AcceptCond, NULL);
+       pthread_mutex_init(&m_ControlLock, NULL);
+@@ -101,7 +99,7 @@ CUDTSocket::~CUDTSocket()
+    delete m_pQueuedSockets;
+    delete m_pAcceptSockets;
+ 
+-   #ifndef WIN32
++   #ifndef WINDOWS
+       pthread_mutex_destroy(&m_AcceptLock);
+       pthread_cond_destroy(&m_AcceptCond);
+       pthread_mutex_destroy(&m_ControlLock);
+@@ -136,7 +134,7 @@ m_ClosedSockets()
+    srand((unsigned int)CTimer::getTime());
+    m_SocketID = 1 + (int)((1 << 30) * (double(rand()) / RAND_MAX));
+ 
+-   #ifndef WIN32
++   #ifndef WINDOWS
+       pthread_mutex_init(&m_ControlLock, NULL);
+       pthread_mutex_init(&m_IDLock, NULL);
+       pthread_mutex_init(&m_InitLock, NULL);
+@@ -146,7 +144,7 @@ m_ClosedSockets()
+       m_InitLock = CreateMutex(NULL, false, NULL);
+    #endif
+ 
+-   #ifndef WIN32
++   #ifndef WINDOWS
+       pthread_key_create(&m_TLSError, TLSDestroy);
+    #else
+       m_TLSError = TlsAlloc();
+@@ -158,7 +156,7 @@ m_ClosedSockets()
+ 
+ CUDTUnited::~CUDTUnited()
+ {
+-   #ifndef WIN32
++   #ifndef WINDOWS
+       pthread_mutex_destroy(&m_ControlLock);
+       pthread_mutex_destroy(&m_IDLock);
+       pthread_mutex_destroy(&m_InitLock);
+@@ -168,7 +166,7 @@ CUDTUnited::~CUDTUnited()
+       CloseHandle(m_InitLock);
+    #endif
+ 
+-   #ifndef WIN32
++   #ifndef WINDOWS
+       pthread_key_delete(m_TLSError);
+    #else
+       TlsFree(m_TLSError);
+@@ -186,7 +184,7 @@ int CUDTUnited::startup()
+       return 0;
+ 
+    // Global initialization code
+-   #ifdef WIN32
++   #ifdef WINDOWS
+       WORD wVersionRequested;
+       WSADATA wsaData;
+       wVersionRequested = MAKEWORD(2, 2);
+@@ -201,7 +199,7 @@ int CUDTUnited::startup()
+       return true;
+ 
+    m_bClosing = false;
+-   #ifndef WIN32
++   #ifndef WINDOWS
+       pthread_mutex_init(&m_GCStopLock, NULL);
+       pthread_cond_init(&m_GCStopCond, NULL);
+       pthread_create(&m_GCThread, NULL, garbageCollect, this);
+@@ -230,7 +228,7 @@ int CUDTUnited::cleanup()
+       return 0;
+ 
+    m_bClosing = true;
+-   #ifndef WIN32
++   #ifndef WINDOWS
+       pthread_cond_signal(&m_GCStopCond);
+       pthread_join(m_GCThread, NULL);
+       pthread_mutex_destroy(&m_GCStopLock);
+@@ -246,7 +244,7 @@ int CUDTUnited::cleanup()
+    m_bGCStatus = false;
+ 
+    // Global destruction code
+-   #ifdef WIN32
++   #ifdef WINDOWS
+       WSACleanup();
+    #endif
+ 
+@@ -313,10 +311,10 @@ UDTSOCKET CUDTUnited::newSocket(int af, int type)
+    return ns->m_SocketID;
+ }
+ 
+-int CUDTUnited::newConnection(const UDTSOCKET listen, const sockaddr* peer, CHandShake* hs)
++int CUDTUnited::newConnection(const UDTSOCKET listener, const sockaddr* peer, CHandShake* hs)
+ {
+    CUDTSocket* ns = NULL;
+-   CUDTSocket* ls = locate(listen);
++   CUDTSocket* ls = locate(listener);
+ 
+    if (NULL == ls)
+       return -1;
+@@ -385,7 +383,7 @@ int CUDTUnited::newConnection(const UDTSOCKET listen, const sockaddr* peer, CHan
+    ns->m_SocketID = -- m_SocketID;
+    CGuard::leaveCS(m_IDLock);
+ 
+-   ns->m_ListenSocket = listen;
++   ns->m_ListenSocket = listener;
+    ns->m_iIPversion = ls->m_iIPversion;
+    ns->m_pUDT->m_SocketID = ns->m_SocketID;
+    ns->m_PeerID = hs->m_iID;
+@@ -437,7 +435,7 @@ int CUDTUnited::newConnection(const UDTSOCKET listen, const sockaddr* peer, CHan
+    CGuard::leaveCS(ls->m_AcceptLock);
+ 
+    // acknowledge users waiting for new connections on the listening socket
+-   m_EPoll.update_events(listen, ls->m_pUDT->m_sPollID, UDT_EPOLL_IN, true);
++   m_EPoll.update_events(listener, ls->m_pUDT->m_sPollID, UDT_EPOLL_IN, true);
+ 
+    CTimer::triggerEvent();
+ 
+@@ -452,7 +450,7 @@ int CUDTUnited::newConnection(const UDTSOCKET listen, const sockaddr* peer, CHan
+    }
+ 
+    // wake up a waiting accept() call
+-   #ifndef WIN32
++   #ifndef WINDOWS
+       pthread_mutex_lock(&(ls->m_AcceptLock));
+       pthread_cond_signal(&(ls->m_AcceptCond));
+       pthread_mutex_unlock(&(ls->m_AcceptLock));
+@@ -616,12 +614,12 @@ int CUDTUnited::listen(const UDTSOCKET u, int backlog)
+    return 0;
+ }
+ 
+-UDTSOCKET CUDTUnited::accept(const UDTSOCKET listen, sockaddr* addr, int* addrlen)
++UDTSOCKET CUDTUnited::accept(const UDTSOCKET listener, sockaddr* addr, int* addrlen)
+ {
+    if ((NULL != addr) && (NULL == addrlen))
+       throw CUDTException(5, 3, 0);
+ 
+-   CUDTSocket* ls = locate(listen);
++   CUDTSocket* ls = locate(listener);
+ 
+    if (ls == NULL)
+       throw CUDTException(5, 4, 0);
+@@ -638,7 +636,7 @@ UDTSOCKET CUDTUnited::accept(const UDTSOCKET listen, sockaddr* addr, int* addrle
+    bool accepted = false;
+ 
+    // !!only one conection can be set up each time!!
+-   #ifndef WIN32
++   #ifndef WINDOWS
+       while (!accepted)
+       {
+          pthread_mutex_lock(&(ls->m_AcceptLock));
+@@ -664,7 +662,7 @@ UDTSOCKET CUDTUnited::accept(const UDTSOCKET listen, sockaddr* addr, int* addrle
+             pthread_cond_wait(&(ls->m_AcceptCond), &(ls->m_AcceptLock));
+ 
+          if (ls->m_pQueuedSockets->empty())
+-            m_EPoll.update_events(listen, ls->m_pUDT->m_sPollID, UDT_EPOLL_IN, false);
++            m_EPoll.update_events(listener, ls->m_pUDT->m_sPollID, UDT_EPOLL_IN, false);
+ 
+          pthread_mutex_unlock(&(ls->m_AcceptLock));
+       }
+@@ -697,7 +695,7 @@ UDTSOCKET CUDTUnited::accept(const UDTSOCKET listen, sockaddr* addr, int* addrle
+          }
+ 
+          if (ls->m_pQueuedSockets->empty())
+-            m_EPoll.update_events(listen, ls->m_pUDT->m_sPollID, UDT_EPOLL_IN, false);
++            m_EPoll.update_events(listener, ls->m_pUDT->m_sPollID, UDT_EPOLL_IN, false);
+       }
+    #endif
+ 
+@@ -822,7 +820,7 @@ int CUDTUnited::close(const UDTSOCKET u)
+       s->m_pUDT->m_bBroken = true;
+ 
+       // broadcast all "accept" waiting
+-      #ifndef WIN32
++      #ifndef WINDOWS
+          pthread_mutex_lock(&(s->m_AcceptLock));
+          pthread_cond_broadcast(&(s->m_AcceptCond));
+          pthread_mutex_unlock(&(s->m_AcceptLock));
+@@ -1340,7 +1338,7 @@ void CUDTUnited::removeSocket(const UDTSOCKET u)
+ 
+ void CUDTUnited::setError(CUDTException* e)
+ {
+-   #ifndef WIN32
++   #ifndef WINDOWS
+       delete (CUDTException*)pthread_getspecific(m_TLSError);
+       pthread_setspecific(m_TLSError, e);
+    #else
+@@ -1353,7 +1351,7 @@ void CUDTUnited::setError(CUDTException* e)
+ 
+ CUDTException* CUDTUnited::getError()
+ {
+-   #ifndef WIN32
++   #ifndef WINDOWS
+       if(NULL == pthread_getspecific(m_TLSError))
+          pthread_setspecific(m_TLSError, new CUDTException);
+       return (CUDTException*)pthread_getspecific(m_TLSError);
+@@ -1369,7 +1367,7 @@ CUDTException* CUDTUnited::getError()
+    #endif
+ }
+ 
+-#ifdef WIN32
++#ifdef WINDOWS
+ void CUDTUnited::checkTLSValue()
+ {
+    CGuard tg(m_TLSLock);
+@@ -1487,7 +1485,7 @@ void CUDTUnited::updateMux(CUDTSocket* s, const CUDTSocket* ls)
+    }
+ }
+ 
+-#ifndef WIN32
++#ifndef WINDOWS
+    void* CUDTUnited::garbageCollect(void* p)
+ #else
+    DWORD WINAPI CUDTUnited::garbageCollect(LPVOID p)
+@@ -1501,11 +1499,11 @@ void CUDTUnited::updateMux(CUDTSocket* s, const CUDTSocket* ls)
+    {
+       self->checkBrokenSockets();
+ 
+-      #ifdef WIN32
++      #ifdef WINDOWS
+          self->checkTLSValue();
+       #endif
+ 
+-      #ifndef WIN32
++      #ifndef WINDOWS
+          timeval now;
+          timespec timeout;
+          gettimeofday(&now, 0);
+@@ -1564,7 +1562,7 @@ void CUDTUnited::updateMux(CUDTSocket* s, const CUDTSocket* ls)
+       CTimer::sleep();
+    }
+ 
+-   #ifndef WIN32
++   #ifndef WINDOWS
+       return NULL;
+    #else
+       return 0;
+diff --git a/JavaLauncherApp/src/udt/api.h b/JavaLauncherApp/src/udt/api.h
+index 2f5f434..faf2f8f 100644
+--- a/JavaLauncherApp/src/udt/api.h
++++ b/JavaLauncherApp/src/udt/api.h
+@@ -77,14 +77,14 @@ public:
+    std::set<UDTSOCKET>* m_pQueuedSockets;    // set of connections waiting for accept()
+    std::set<UDTSOCKET>* m_pAcceptSockets;    // set of accept()ed connections
+ 
+-   pthread_cond_t m_AcceptCond;              // used to block "accept" call
+-   pthread_mutex_t m_AcceptLock;             // mutex associated to m_AcceptCond
++   udt_pthread_cond_t m_AcceptCond;              // used to block "accept" call
++   udt_pthread_mutex_t m_AcceptLock;             // mutex associated to m_AcceptCond
+ 
+    unsigned int m_uiBackLog;                 // maximum number of connections in queue
+ 
+    int m_iMuxID;                             // multiplexer ID
+ 
+-   pthread_mutex_t m_ControlLock;            // lock this socket exclusively for control APIs: bind/listen/connect
++   udt_pthread_mutex_t m_ControlLock;            // lock this socket exclusively for control APIs: bind/listen/connect
+ 
+ private:
+    CUDTSocket(const CUDTSocket&);
+@@ -210,21 +210,21 @@ private:
+ private:
+    std::map<UDTSOCKET, CUDTSocket*> m_Sockets;       // stores all the socket structures
+ 
+-   pthread_mutex_t m_ControlLock;                    // used to synchronize UDT API
++   udt_pthread_mutex_t m_ControlLock;                // used to synchronize UDT API
+ 
+-   pthread_mutex_t m_IDLock;                         // used to synchronize ID generation
++   udt_pthread_mutex_t m_IDLock;                     // used to synchronize ID generation
+    UDTSOCKET m_SocketID;                             // seed to generate a new unique socket ID
+ 
+    std::map<int64_t, std::set<UDTSOCKET> > m_PeerRec;// record sockets from peers to avoid repeated connection request, int64_t = (socker_id << 30) + isn
+ 
+ private:
+-   pthread_key_t m_TLSError;                         // thread local error record (last error)
+-   #ifndef WIN32
++   udt_pthread_key_t m_TLSError;                     // thread local error record (last error)
++   #ifndef WINDOWS
+       static void TLSDestroy(void* e) {if (NULL != e) delete (CUDTException*)e;}
+    #else
+       std::map<DWORD, CUDTException*> m_mTLSRecord;
+       void checkTLSValue();
+-      pthread_mutex_t m_TLSLock;
++      udt_pthread_mutex_t m_TLSLock;
+    #endif
+ 
+ private:
+@@ -236,22 +236,22 @@ private:
+ 
+ private:
+    std::map<int, CMultiplexer> m_mMultiplexer;		// UDP multiplexer
+-   pthread_mutex_t m_MultiplexerLock;
++   udt_pthread_mutex_t m_MultiplexerLock;
+ 
+ private:
+    CCache<CInfoBlock>* m_pCache;			// UDT network information cache
+ 
+ private:
+    volatile bool m_bClosing;
+-   pthread_mutex_t m_GCStopLock;
+-   pthread_cond_t m_GCStopCond;
++   udt_pthread_mutex_t m_GCStopLock;
++   udt_pthread_cond_t m_GCStopCond;
+ 
+-   pthread_mutex_t m_InitLock;
++   udt_pthread_mutex_t m_InitLock;
+    int m_iInstanceCount;				// number of startup() called by application
+    bool m_bGCStatus;					// if the GC thread is working (true)
+ 
+-   pthread_t m_GCThread;
+-   #ifndef WIN32
++   udt_pthread_t m_GCThread;
++   #ifndef WINDOWS
+       static void* garbageCollect(void*);
+    #else
+       static DWORD WINAPI garbageCollect(LPVOID);
+diff --git a/JavaLauncherApp/src/udt/buffer.cpp b/JavaLauncherApp/src/udt/buffer.cpp
+index 327ab76..53084e6 100644
+--- a/JavaLauncherApp/src/udt/buffer.cpp
++++ b/JavaLauncherApp/src/udt/buffer.cpp
+@@ -84,7 +84,7 @@ m_iCount(0)
+ 
+    m_pFirstBlock = m_pCurrBlock = m_pLastBlock = m_pBlock;
+ 
+-   #ifndef WIN32
++   #ifndef WINDOWS
+       pthread_mutex_init(&m_BufLock, NULL);
+    #else
+       m_BufLock = CreateMutex(NULL, false, NULL);
+@@ -110,7 +110,7 @@ CSndBuffer::~CSndBuffer()
+       delete temp;
+    }
+ 
+-   #ifndef WIN32
++   #ifndef WINDOWS
+       pthread_mutex_destroy(&m_BufLock);
+    #else
+       CloseHandle(m_BufLock);
+@@ -379,7 +379,7 @@ int CRcvBuffer::addData(CUnit* unit, int offset)
+ 
+    if (NULL != m_pUnit[pos])
+       return -1;
+-   
++
+    m_pUnit[pos] = unit;
+ 
+    unit->m_iFlag = 1;
+diff --git a/JavaLauncherApp/src/udt/buffer.h b/JavaLauncherApp/src/udt/buffer.h
+index 4377e79..a07cd6d 100644
+--- a/JavaLauncherApp/src/udt/buffer.h
++++ b/JavaLauncherApp/src/udt/buffer.h
+@@ -119,7 +119,7 @@ private:
+    void increase();
+ 
+ private:
+-   pthread_mutex_t m_BufLock;           // used to synchronize buffer operation
++   udt_pthread_mutex_t m_BufLock;           // used to synchronize buffer operation
+ 
+    struct Block
+    {
+@@ -260,7 +260,7 @@ private:
+ 
+    int m_iStartPos;                     // the head position for I/O (inclusive)
+    int m_iLastAckPos;                   // the last ACKed position (exclusive)
+-					// EMPTY: m_iStartPos = m_iLastAckPos   FULL: m_iStartPos = m_iLastAckPos + 1
++                    // EMPTY: m_iStartPos = m_iLastAckPos   FULL: m_iStartPos = m_iLastAckPos + 1
+    int m_iMaxPos;			// the furthest data position
+ 
+    int m_iNotch;			// the starting read point of the first unit
+diff --git a/JavaLauncherApp/src/udt/cache.cpp b/JavaLauncherApp/src/udt/cache.cpp
+index ea0aad1..467f724 100644
+--- a/JavaLauncherApp/src/udt/cache.cpp
++++ b/JavaLauncherApp/src/udt/cache.cpp
+@@ -38,12 +38,10 @@ written by
+    Yunhong Gu, last updated 05/05/2009
+ *****************************************************************************/
+ 
+-#ifdef WIN32
++#ifdef WINDOWS
+    #include <winsock2.h>
+    #include <ws2tcpip.h>
+-   #ifdef LEGACY_WIN32
+-      #include <wspiapi.h>
+-   #endif
++   #include <wspiapi.h>
+ #endif
+ 
+ #include <cstring>
+diff --git a/JavaLauncherApp/src/udt/cache.h b/JavaLauncherApp/src/udt/cache.h
+index 22d9624..cdf2f37 100644
+--- a/JavaLauncherApp/src/udt/cache.h
++++ b/JavaLauncherApp/src/udt/cache.h
+@@ -44,7 +44,7 @@ written by
+ #include <list>
+ #include <vector>
+ 
+-#include "common.h"
++#include "udtCommon.h"
+ #include "udt.h"
+ 
+ class CCacheItem
+@@ -246,7 +246,7 @@ private:
+    int m_iHashSize;
+    int m_iCurrSize;
+ 
+-   pthread_mutex_t m_Lock;
++   udt_pthread_mutex_t m_Lock;
+ 
+ private:
+    CCache(const CCache&);
+diff --git a/JavaLauncherApp/src/udt/channel.cpp b/JavaLauncherApp/src/udt/channel.cpp
+index 7b010f0..10081e1 100644
+--- a/JavaLauncherApp/src/udt/channel.cpp
++++ b/JavaLauncherApp/src/udt/channel.cpp
+@@ -38,7 +38,7 @@ written by
+    Yunhong Gu, last updated 01/27/2011
+ *****************************************************************************/
+ 
+-#ifndef WIN32
++#ifndef WINDOWS
+    #include <netdb.h>
+    #include <arpa/inet.h>
+    #include <unistd.h>
+@@ -49,18 +49,16 @@ written by
+ #else
+    #include <winsock2.h>
+    #include <ws2tcpip.h>
+-   #ifdef LEGACY_WIN32
+-      #include <wspiapi.h>
+-   #endif
++   #include <wspiapi.h>
+ #endif
+ #include "channel.h"
+ #include "packet.h"
+ 
+-#ifdef WIN32
++#ifdef WINDOWS
+    #define socklen_t int
+ #endif
+ 
+-#ifndef WIN32
++#ifndef WINDOWS
+    #define NET_ERROR errno
+ #else
+    #define NET_ERROR WSAGetLastError()
+@@ -94,7 +92,7 @@ void CChannel::open(const sockaddr* addr)
+    // construct an socket
+    m_iSocket = ::socket(m_iIPversion, SOCK_DGRAM, 0);
+ 
+-   #ifdef WIN32
++   #ifdef WINDOWS
+       if (INVALID_SOCKET == m_iSocket)
+    #else
+       if (m_iSocket < 0)
+@@ -140,7 +138,7 @@ void CChannel::open(UDPSOCKET udpsock)
+ 
+ void CChannel::setUDPSockOpt()
+ {
+-   #if defined(BSD) || defined(OSX)
++   #if defined(BSD) || defined(MACOSX)
+       // BSD system will fail setsockopt if the requested buffer size exceeds system maximum value
+       int maxsize = 64000;
+       if (0 != ::setsockopt(m_iSocket, SOL_SOCKET, SO_RCVBUF, (char*)&m_iRcvBufSize, sizeof(int)))
+@@ -156,7 +154,7 @@ void CChannel::setUDPSockOpt()
+ 
+    timeval tv;
+    tv.tv_sec = 0;
+-   #if defined (BSD) || defined (OSX)
++   #if defined (BSD) || defined (MACOSX)
+       // Known BSD bug as the day I wrote this code.
+       // A small time out value will cause the socket to block forever.
+       tv.tv_usec = 10000;
+@@ -170,7 +168,7 @@ void CChannel::setUDPSockOpt()
+       int opts = ::fcntl(m_iSocket, F_GETFL);
+       if (-1 == ::fcntl(m_iSocket, F_SETFL, opts | O_NONBLOCK))
+          throw CUDTException(1, 3, NET_ERROR);
+-   #elif WIN32
++   #elif WINDOWS
+       DWORD ot = 1; //milliseconds
+       if (0 != ::setsockopt(m_iSocket, SOL_SOCKET, SO_RCVTIMEO, (char *)&ot, sizeof(DWORD)))
+          throw CUDTException(1, 3, NET_ERROR);
+@@ -183,7 +181,7 @@ void CChannel::setUDPSockOpt()
+ 
+ void CChannel::close() const
+ {
+-   #ifndef WIN32
++   #ifndef WINDOWS
+       ::close(m_iSocket);
+    #else
+       ::closesocket(m_iSocket);
+@@ -243,7 +241,7 @@ int CChannel::sendto(const sockaddr* addr, CPacket& packet) const
+       ++ p;
+    }
+ 
+-   #ifndef WIN32
++   #ifndef WINDOWS
+       msghdr mh;
+       mh.msg_name = (sockaddr*)addr;
+       mh.msg_namelen = m_iSockAddrSize;
+@@ -282,8 +280,8 @@ int CChannel::sendto(const sockaddr* addr, CPacket& packet) const
+ 
+ int CChannel::recvfrom(sockaddr* addr, CPacket& packet) const
+ {
+-   #ifndef WIN32
+-      msghdr mh;   
++   #ifndef WINDOWS
++      msghdr mh;
+       mh.msg_name = addr;
+       mh.msg_namelen = m_iSockAddrSize;
+       mh.msg_iov = packet.m_PacketVector;
+diff --git a/JavaLauncherApp/src/udt/core.cpp b/JavaLauncherApp/src/udt/core.cpp
+index a5b490e..c1c8d03 100644
+--- a/JavaLauncherApp/src/udt/core.cpp
++++ b/JavaLauncherApp/src/udt/core.cpp
+@@ -38,7 +38,7 @@ written by
+    Yunhong Gu, last updated 02/28/2012
+ *****************************************************************************/
+ 
+-#ifndef WIN32
++#ifndef WINDOWS
+    #include <unistd.h>
+    #include <netdb.h>
+    #include <arpa/inet.h>
+@@ -48,9 +48,7 @@ written by
+ #else
+    #include <winsock2.h>
+    #include <ws2tcpip.h>
+-   #ifdef LEGACY_WIN32
+-      #include <wspiapi.h>
+-   #endif
++   #include <wspiapi.h>
+ #endif
+ #include <cmath>
+ #include <sstream>
+@@ -936,7 +934,7 @@ void CUDT::close()
+             return;
+          }
+ 
+-         #ifndef WIN32
++         #ifndef WINDOWS
+             timespec ts;
+             ts.tv_sec = 0;
+             ts.tv_nsec = 1000000;
+@@ -1047,7 +1045,7 @@ int CUDT::send(const char* data, int len)
+       else
+       {
+          // wait here during a blocking sending
+-         #ifndef WIN32
++         #ifndef WINDOWS
+             pthread_mutex_lock(&m_SendBlockLock);
+             if (m_iSndTimeOut < 0)
+             {
+@@ -1147,7 +1145,7 @@ int CUDT::recv(char* data, int len)
+          throw CUDTException(6, 2, 0);
+       else
+       {
+-         #ifndef WIN32
++         #ifndef WINDOWS
+             pthread_mutex_lock(&m_RecvDataLock);
+             if (m_iRcvTimeOut < 0)
+             {
+@@ -1246,7 +1244,7 @@ int CUDT::sendmsg(const char* data, int len, int msttl, bool inorder)
+       else
+       {
+          // wait here during a blocking sending
+-         #ifndef WIN32
++         #ifndef WINDOWS
+             pthread_mutex_lock(&m_SendBlockLock);
+             if (m_iSndTimeOut < 0)
+             {
+@@ -1359,7 +1357,7 @@ int CUDT::recvmsg(char* data, int len)
+ 
+    do
+    {
+-      #ifndef WIN32
++      #ifndef WINDOWS
+          pthread_mutex_lock(&m_RecvDataLock);
+ 
+          if (m_iRcvTimeOut < 0)
+@@ -1461,7 +1459,7 @@ int64_t CUDT::sendfile(fstream& ifs, int64_t& offset, int64_t size, int block)
+ 
+       unitsize = int((tosend >= block) ? block : tosend);
+ 
+-      #ifndef WIN32
++      #ifndef WINDOWS
+          pthread_mutex_lock(&m_SendBlockLock);
+          while (!m_bBroken && m_bConnected && !m_bClosing && (m_iSndBufSize <= m_pSndBuffer->getCurrBufSize()) && m_bPeerHealth)
+             pthread_cond_wait(&m_SendBlockCond, &m_SendBlockLock);
+@@ -1548,7 +1546,7 @@ int64_t CUDT::recvfile(fstream& ofs, int64_t& offset, int64_t size, int block)
+          throw CUDTException(4, 4);
+       }
+ 
+-      #ifndef WIN32
++      #ifndef WINDOWS
+          pthread_mutex_lock(&m_RecvDataLock);
+          while (!m_bBroken && m_bConnected && !m_bClosing && (0 == m_pRcvBuffer->getRcvDataSize()))
+             pthread_cond_wait(&m_RecvDataCond, &m_RecvDataLock);
+@@ -1626,7 +1624,7 @@ void CUDT::sample(CPerfMon* perf, bool clear)
+    perf->msRTT = m_iRTT/1000.0;
+    perf->mbpsBandwidth = m_iBandwidth * m_iPayloadSize * 8.0 / 1000000.0;
+ 
+-   #ifndef WIN32
++   #ifndef WINDOWS
+       if (0 == pthread_mutex_trylock(&m_ConnectionLock))
+    #else
+       if (WAIT_OBJECT_0 == WaitForSingleObject(m_ConnectionLock, 0))
+@@ -1635,7 +1633,7 @@ void CUDT::sample(CPerfMon* perf, bool clear)
+       perf->byteAvailSndBuf = (NULL == m_pSndBuffer) ? 0 : (m_iSndBufSize - m_pSndBuffer->getCurrBufSize()) * m_iMSS;
+       perf->byteAvailRcvBuf = (NULL == m_pRcvBuffer) ? 0 : m_pRcvBuffer->getAvailBufSize() * m_iMSS;
+ 
+-      #ifndef WIN32
++      #ifndef WINDOWS
+          pthread_mutex_unlock(&m_ConnectionLock);
+       #else
+          ReleaseMutex(m_ConnectionLock);
+@@ -1669,7 +1667,7 @@ void CUDT::CCUpdate()
+ 
+ void CUDT::initSynch()
+ {
+-   #ifndef WIN32
++   #ifndef WINDOWS
+       pthread_mutex_init(&m_SendBlockLock, NULL);
+       pthread_cond_init(&m_SendBlockCond, NULL);
+       pthread_mutex_init(&m_RecvDataLock, NULL);
+@@ -1692,7 +1690,7 @@ void CUDT::initSynch()
+ 
+ void CUDT::destroySynch()
+ {
+-   #ifndef WIN32
++   #ifndef WINDOWS
+       pthread_mutex_destroy(&m_SendBlockLock);
+       pthread_cond_destroy(&m_SendBlockCond);
+       pthread_mutex_destroy(&m_RecvDataLock);
+@@ -1715,7 +1713,7 @@ void CUDT::destroySynch()
+ 
+ void CUDT::releaseSynch()
+ {
+-   #ifndef WIN32
++   #ifndef WINDOWS
+       // wake up user calls
+       pthread_mutex_lock(&m_SendBlockLock);
+       pthread_cond_signal(&m_SendBlockCond);
+@@ -1784,7 +1782,7 @@ void CUDT::sendCtrl(int pkttype, void* lparam, void* rparam, int size)
+          m_pRcvBuffer->ackData(acksize);
+ 
+          // signal a waiting "recv" call if there is any data available
+-         #ifndef WIN32
++         #ifndef WINDOWS
+             pthread_mutex_lock(&m_RecvDataLock);
+             if (m_bSynRecving)
+                pthread_cond_signal(&m_RecvDataCond);
+@@ -2041,7 +2039,7 @@ void CUDT::processCtrl(CPacket& ctrlpkt)
+ 
+       CGuard::leaveCS(m_AckLock);
+ 
+-      #ifndef WIN32
++      #ifndef WINDOWS
+          pthread_mutex_lock(&m_SendBlockLock);
+          if (m_bSynSending)
+             pthread_cond_signal(&m_SendBlockCond);
+diff --git a/JavaLauncherApp/src/udt/core.h b/JavaLauncherApp/src/udt/core.h
+index fe35404..3f1f376 100644
+--- a/JavaLauncherApp/src/udt/core.h
++++ b/JavaLauncherApp/src/udt/core.h
+@@ -43,7 +43,7 @@ written by
+ 
+ 
+ #include "udt.h"
+-#include "common.h"
++#include "udtCommon.h"
+ #include "list.h"
+ #include "buffer.h"
+ #include "window.h"
+@@ -371,18 +371,18 @@ private: // Receiving related data
+    int32_t m_iPeerISN;                          // Initial Sequence Number of the peer side
+ 
+ private: // synchronization: mutexes and conditions
+-   pthread_mutex_t m_ConnectionLock;            // used to synchronize connection operation
++   udt_pthread_mutex_t m_ConnectionLock;            // used to synchronize connection operation
+ 
+-   pthread_cond_t m_SendBlockCond;              // used to block "send" call
+-   pthread_mutex_t m_SendBlockLock;             // lock associated to m_SendBlockCond
++   udt_pthread_cond_t m_SendBlockCond;              // used to block "send" call
++   udt_pthread_mutex_t m_SendBlockLock;             // lock associated to m_SendBlockCond
+ 
+-   pthread_mutex_t m_AckLock;                   // used to protected sender's loss list when processing ACK
++   udt_pthread_mutex_t m_AckLock;                   // used to protected sender's loss list when processing ACK
+ 
+-   pthread_cond_t m_RecvDataCond;               // used to block "recv" when there is no data
+-   pthread_mutex_t m_RecvDataLock;              // lock associated to m_RecvDataCond
++   udt_pthread_cond_t m_RecvDataCond;               // used to block "recv" when there is no data
++   udt_pthread_mutex_t m_RecvDataLock;              // lock associated to m_RecvDataCond
+ 
+-   pthread_mutex_t m_SendLock;                  // used to synchronize "send" call
+-   pthread_mutex_t m_RecvLock;                  // used to synchronize "recv" call
++   udt_pthread_mutex_t m_SendLock;                  // used to synchronize "send" call
++   udt_pthread_mutex_t m_RecvLock;                  // used to synchronize "recv" call
+ 
+    void initSynch();
+    void destroySynch();
+diff --git a/JavaLauncherApp/src/udt/epoll.cpp b/JavaLauncherApp/src/udt/epoll.cpp
+index 806a791..ab16ce8 100644
+--- a/JavaLauncherApp/src/udt/epoll.cpp
++++ b/JavaLauncherApp/src/udt/epoll.cpp
+@@ -311,32 +311,32 @@ int CEPoll::wait(const int eid, set<UDTSOCKET>* readfds, set<UDTSOCKET>* writefd
+ 
+          //"select" has a limitation on the number of sockets
+ 
+-         fd_set readfds;
+-         fd_set writefds;
+-         FD_ZERO(&readfds);
+-         FD_ZERO(&writefds);
++         fd_set readfds2;
++         fd_set writefds2;
++         FD_ZERO(&readfds2);
++         FD_ZERO(&writefds2);
+ 
+          for (set<SYSSOCKET>::const_iterator i = p->second.m_sLocals.begin(); i != p->second.m_sLocals.end(); ++ i)
+          {
+             if (lrfds)
+-               FD_SET(*i, &readfds);
++               FD_SET(*i, &readfds2);
+             if (lwfds)
+-               FD_SET(*i, &writefds);
++               FD_SET(*i, &writefds2);
+          }
+ 
+          timeval tv;
+          tv.tv_sec = 0;
+          tv.tv_usec = 0;
+-         if (::select(0, &readfds, &writefds, NULL, &tv) > 0)
++         if (::select(0, &readfds2, &writefds2, NULL, &tv) > 0)
+          {
+             for (set<SYSSOCKET>::const_iterator i = p->second.m_sLocals.begin(); i != p->second.m_sLocals.end(); ++ i)
+             {
+-               if (lrfds && FD_ISSET(*i, &readfds))
++               if (lrfds && FD_ISSET(*i, &readfds2))
+                {
+                   lrfds->insert(*i);
+                   ++ total;
+                }
+-               if (lwfds && FD_ISSET(*i, &writefds))
++               if (lwfds && FD_ISSET(*i, &writefds2))
+                {
+                   lwfds->insert(*i);
+                   ++ total;
+diff --git a/JavaLauncherApp/src/udt/epoll.h b/JavaLauncherApp/src/udt/epoll.h
+index 2dc349d..82b2a7e 100644
+--- a/JavaLauncherApp/src/udt/epoll.h
++++ b/JavaLauncherApp/src/udt/epoll.h
+@@ -168,10 +168,10 @@ public: // for CUDT to acknowledge IO status
+ 
+ private:
+    int m_iIDSeed;                            // seed to generate a new ID
+-   pthread_mutex_t m_SeedLock;
++   udt_pthread_mutex_t m_SeedLock;
+ 
+    std::map<int, CEPollDesc> m_mPolls;       // all epolls
+-   pthread_mutex_t m_EPollLock;
++   udt_pthread_mutex_t m_EPollLock;
+ };
+ 
+ 
+diff --git a/JavaLauncherApp/src/udt/list.cpp b/JavaLauncherApp/src/udt/list.cpp
+index 00b7e57..af0c680 100644
+--- a/JavaLauncherApp/src/udt/list.cpp
++++ b/JavaLauncherApp/src/udt/list.cpp
+@@ -62,7 +62,7 @@ m_ListLock()
+    }
+ 
+    // sender list needs mutex protection
+-   #ifndef WIN32
++   #ifndef WINDOWS
+       pthread_mutex_init(&m_ListLock, 0);
+    #else
+       m_ListLock = CreateMutex(NULL, false, NULL);
+@@ -75,7 +75,7 @@ CSndLossList::~CSndLossList()
+    delete [] m_piData2;
+    delete [] m_piNext;
+ 
+-   #ifndef WIN32
++   #ifndef WINDOWS
+       pthread_mutex_destroy(&m_ListLock);
+    #else
+       CloseHandle(m_ListLock);
+@@ -208,14 +208,14 @@ int CSndLossList::insert(int32_t seqno1, int32_t seqno2)
+             m_iLength += CSeqNo::seqlen(m_piData2[loc], seqno2) - 1;
+             m_piData2[loc] = seqno2;
+          }
+-         else 
++         else
+             return 0;
+       }
+       else
+          return 0;
+    }
+ 
+-   // coalesce with next node. E.g., [3, 7], ..., [6, 9] becomes [3, 9] 
++   // coalesce with next node. E.g., [3, 7], ..., [6, 9] becomes [3, 9]
+    while ((-1 != m_piNext[loc]) && (-1 != m_piData2[loc]))
+    {
+       int i = m_piNext[loc];
+@@ -501,7 +501,7 @@ void CRcvLossList::insert(int32_t seqno1, int32_t seqno2)
+ bool CRcvLossList::remove(int32_t seqno)
+ {
+    if (0 == m_iLength)
+-      return false; 
++      return false;
+ 
+    // locate the position of "seqno" in the list
+    int offset = CSeqNo::seqoff(m_piData1[m_iHead], seqno);
+@@ -552,7 +552,7 @@ bool CRcvLossList::remove(int32_t seqno)
+          // remove the current node
+          m_piData1[loc] = -1;
+          m_piData2[loc] = -1;
+- 
++
+          // update list pointer
+          m_piNext[i] = m_piNext[loc];
+          m_piPrior[i] = m_piPrior[loc];
+@@ -603,7 +603,7 @@ bool CRcvLossList::remove(int32_t seqno)
+       loc = (loc + 1) % m_iSize;
+ 
+       m_piData1[loc] = CSeqNo::incseq(seqno);
+-      if (CSeqNo::seqcmp(m_piData2[i], m_piData1[loc]) > 0)      
++      if (CSeqNo::seqcmp(m_piData2[i], m_piData1[loc]) > 0)
+          m_piData2[loc] = m_piData2[i];
+ 
+       // the first (original) sequence is between the original sequence start to CSeqNo::decseq(seqno)
+diff --git a/JavaLauncherApp/src/udt/list.h b/JavaLauncherApp/src/udt/list.h
+index 6be9694..c9dfeb0 100644
+--- a/JavaLauncherApp/src/udt/list.h
++++ b/JavaLauncherApp/src/udt/list.h
+@@ -43,7 +43,7 @@ written by
+ 
+ 
+ #include "udt.h"
+-#include "common.h"
++#include "udtCommon.h"
+ 
+ 
+ class CSndLossList
+@@ -99,7 +99,7 @@ private:
+    int m_iSize;                         // size of the static array
+    int m_iLastInsertPos;                // position of last insert node
+ 
+-   pthread_mutex_t m_ListLock;          // used to synchronize list operation
++   udt_pthread_mutex_t m_ListLock;          // used to synchronize list operation
+ 
+ private:
+    CSndLossList(const CSndLossList&);
+diff --git a/JavaLauncherApp/src/udt/packet.h b/JavaLauncherApp/src/udt/packet.h
+index 76cc951..86d72b9 100644
+--- a/JavaLauncherApp/src/udt/packet.h
++++ b/JavaLauncherApp/src/udt/packet.h
+@@ -44,7 +44,7 @@ written by
+ 
+ #include "udt.h"
+ 
+-#ifdef WIN32
++#ifdef WINDOWS
+    struct iovec
+    {
+       int iov_len;
+diff --git a/JavaLauncherApp/src/udt/queue.cpp b/JavaLauncherApp/src/udt/queue.cpp
+index 2caea2a..985a95f 100644
+--- a/JavaLauncherApp/src/udt/queue.cpp
++++ b/JavaLauncherApp/src/udt/queue.cpp
+@@ -38,16 +38,14 @@ written by
+    Yunhong Gu, last updated 05/05/2011
+ *****************************************************************************/
+ 
+-#ifdef WIN32
++#ifdef WINDOWS
+    #include <winsock2.h>
+    #include <ws2tcpip.h>
+-   #ifdef LEGACY_WIN32
+-      #include <wspiapi.h>
+-   #endif
++   #include <wspiapi.h>
+ #endif
+ #include <cstring>
+ 
+-#include "common.h"
++#include "udtCommon.h"
+ #include "core.h"
+ #include "queue.h"
+ 
+@@ -234,7 +232,7 @@ m_pTimer(NULL)
+ {
+    m_pHeap = new CSNode*[m_iArrayLength];
+ 
+-   #ifndef WIN32
++   #ifndef WINDOWS
+       pthread_mutex_init(&m_ListLock, NULL);
+    #else
+       m_ListLock = CreateMutex(NULL, false, NULL);
+@@ -245,7 +243,7 @@ CSndUList::~CSndUList()
+ {
+    delete [] m_pHeap;
+ 
+-   #ifndef WIN32
++   #ifndef WINDOWS
+       pthread_mutex_destroy(&m_ListLock);
+    #else
+       CloseHandle(m_ListLock);
+@@ -390,7 +388,7 @@ void CSndUList::insert_(int64_t ts, const CUDT* u)
+    // first entry, activate the sending queue
+    if (0 == m_iLastEntry)
+    {
+-      #ifndef WIN32
++      #ifndef WINDOWS
+          pthread_mutex_lock(m_pWindowLock);
+          pthread_cond_signal(m_pWindowCond);
+          pthread_mutex_unlock(m_pWindowLock);
+@@ -452,7 +450,7 @@ m_WindowCond(),
+ m_bClosing(false),
+ m_ExitCond()
+ {
+-   #ifndef WIN32
++   #ifndef WINDOWS
+       pthread_cond_init(&m_WindowCond, NULL);
+       pthread_mutex_init(&m_WindowLock, NULL);
+    #else
+@@ -466,7 +464,7 @@ CSndQueue::~CSndQueue()
+ {
+    m_bClosing = true;
+ 
+-   #ifndef WIN32
++   #ifndef WINDOWS
+       pthread_mutex_lock(&m_WindowLock);
+       pthread_cond_signal(&m_WindowCond);
+       pthread_mutex_unlock(&m_WindowLock);
+@@ -496,7 +494,7 @@ void CSndQueue::init(CChannel* c, CTimer* t)
+    m_pSndUList->m_pWindowCond = &m_WindowCond;
+    m_pSndUList->m_pTimer = m_pTimer;
+ 
+-   #ifndef WIN32
++   #ifndef WINDOWS
+       if (0 != pthread_create(&m_WorkerThread, NULL, CSndQueue::worker, this))
+       {
+          m_WorkerThread = 0;
+@@ -510,7 +508,7 @@ void CSndQueue::init(CChannel* c, CTimer* t)
+    #endif
+ }
+ 
+-#ifndef WIN32
++#ifndef WINDOWS
+    void* CSndQueue::worker(void* param)
+ #else
+    DWORD WINAPI CSndQueue::worker(LPVOID param)
+@@ -541,7 +539,7 @@ void CSndQueue::init(CChannel* c, CTimer* t)
+       else
+       {
+          // wait here if there is no sockets with data to be sent
+-         #ifndef WIN32
++         #ifndef WINDOWS
+             pthread_mutex_lock(&self->m_WindowLock);
+             if (!self->m_bClosing && (self->m_pSndUList->m_iLastEntry < 0))
+                pthread_cond_wait(&self->m_WindowCond, &self->m_WindowLock);
+@@ -552,7 +550,7 @@ void CSndQueue::init(CChannel* c, CTimer* t)
+       }
+    }
+ 
+-   #ifndef WIN32
++   #ifndef WINDOWS
+       return NULL;
+    #else
+       SetEvent(self->m_ExitCond);
+@@ -751,7 +749,7 @@ CRendezvousQueue::CRendezvousQueue():
+ m_lRendezvousID(),
+ m_RIDVectorLock()
+ {
+-   #ifndef WIN32
++   #ifndef WINDOWS
+       pthread_mutex_init(&m_RIDVectorLock, NULL);
+    #else
+       m_RIDVectorLock = CreateMutex(NULL, false, NULL);
+@@ -760,7 +758,7 @@ m_RIDVectorLock()
+ 
+ CRendezvousQueue::~CRendezvousQueue()
+ {
+-   #ifndef WIN32
++   #ifndef WINDOWS
+       pthread_mutex_destroy(&m_RIDVectorLock);
+    #else
+       CloseHandle(m_RIDVectorLock);
+@@ -884,7 +882,7 @@ m_mBuffer(),
+ m_PassLock(),
+ m_PassCond()
+ {
+-   #ifndef WIN32
++   #ifndef WINDOWS
+       pthread_mutex_init(&m_PassLock, NULL);
+       pthread_cond_init(&m_PassCond, NULL);
+       pthread_mutex_init(&m_LSLock, NULL);
+@@ -902,7 +900,7 @@ CRcvQueue::~CRcvQueue()
+ {
+    m_bClosing = true;
+ 
+-   #ifndef WIN32
++   #ifndef WINDOWS
+       if (0 != m_WorkerThread)
+          pthread_join(m_WorkerThread, NULL);
+       pthread_mutex_destroy(&m_PassLock);
+@@ -952,7 +950,7 @@ void CRcvQueue::init(int qsize, int payload, int version, int hsize, CChannel* c
+    m_pRcvUList = new CRcvUList;
+    m_pRendezvousQueue = new CRendezvousQueue;
+ 
+-   #ifndef WIN32
++   #ifndef WINDOWS
+       if (0 != pthread_create(&m_WorkerThread, NULL, CRcvQueue::worker, this))
+       {
+          m_WorkerThread = 0;
+@@ -966,7 +964,7 @@ void CRcvQueue::init(int qsize, int payload, int version, int hsize, CChannel* c
+    #endif
+ }
+ 
+-#ifndef WIN32
++#ifndef WINDOWS
+    void* CRcvQueue::worker(void* param)
+ #else
+    DWORD WINAPI CRcvQueue::worker(LPVOID param)
+@@ -1068,19 +1066,19 @@ TIMER_CHECK:
+       uint64_t ctime = currtime - 100000 * CTimer::getCPUFrequency();
+       while ((NULL != ul) && (ul->m_llTimeStamp < ctime))
+       {
+-         CUDT* u = ul->m_pUDT;
++         CUDT* udt = ul->m_pUDT;
+ 
+-         if (u->m_bConnected && !u->m_bBroken && !u->m_bClosing)
++         if (udt->m_bConnected && !udt->m_bBroken && !udt->m_bClosing)
+          {
+-            u->checkTimers();
+-            self->m_pRcvUList->update(u);
++            udt->checkTimers();
++            self->m_pRcvUList->update(udt);
+          }
+          else
+          {
+             // the socket must be removed from Hash table first, then RcvUList
+-            self->m_pHash->remove(u->m_SocketID);
+-            self->m_pRcvUList->remove(u);
+-            u->m_pRNode->m_bOnList = false;
++            self->m_pHash->remove(udt->m_SocketID);
++            self->m_pRcvUList->remove(udt);
++            udt->m_pRNode->m_bOnList = false;
+          }
+ 
+          ul = self->m_pRcvUList->m_pUList;
+@@ -1095,7 +1093,7 @@ TIMER_CHECK:
+    else
+       delete (sockaddr_in6*)addr;
+ 
+-   #ifndef WIN32
++   #ifndef WINDOWS
+       return NULL;
+    #else
+       SetEvent(self->m_ExitCond);
+@@ -1111,7 +1109,7 @@ int CRcvQueue::recvfrom(int32_t id, CPacket& packet)
+ 
+    if (i == m_mBuffer.end())
+    {
+-      #ifndef WIN32
++      #ifndef WINDOWS
+          uint64_t now = CTimer::getTime();
+          timespec timeout;
+ 
+@@ -1150,7 +1148,7 @@ int CRcvQueue::recvfrom(int32_t id, CPacket& packet)
+    delete [] newpkt->m_pcData;
+    delete newpkt;
+ 
+-   // remove this message from queue, 
++   // remove this message from queue,
+    // if no more messages left for this socket, release its data structure
+    i->second.pop();
+    if (i->second.empty())
+@@ -1228,7 +1226,7 @@ CUDT* CRcvQueue::getNewEntry()
+ 
+ void CRcvQueue::storePkt(int32_t id, CPacket* pkt)
+ {
+-   CGuard bufferlock(m_PassLock);   
++   CGuard bufferlock(m_PassLock);
+ 
+    map<int32_t, std::queue<CPacket*> >::iterator i = m_mBuffer.find(id);
+ 
+@@ -1236,7 +1234,7 @@ void CRcvQueue::storePkt(int32_t id, CPacket* pkt)
+    {
+       m_mBuffer[id].push(pkt);
+ 
+-      #ifndef WIN32
++      #ifndef WINDOWS
+          pthread_cond_signal(&m_PassCond);
+       #else
+          SetEvent(m_PassCond);
+diff --git a/JavaLauncherApp/src/udt/queue.h b/JavaLauncherApp/src/udt/queue.h
+index cb1b8d2..47e2e8f 100644
+--- a/JavaLauncherApp/src/udt/queue.h
++++ b/JavaLauncherApp/src/udt/queue.h
+@@ -208,10 +208,10 @@ private:
+    int m_iArrayLength;			// physical length of the array
+    int m_iLastEntry;			// position of last entry on the heap array
+ 
+-   pthread_mutex_t m_ListLock;
++   udt_pthread_mutex_t m_ListLock;
+ 
+-   pthread_mutex_t* m_pWindowLock;
+-   pthread_cond_t* m_pWindowCond;
++   udt_pthread_mutex_t* m_pWindowLock;
++   udt_pthread_cond_t* m_pWindowCond;
+ 
+    CTimer* m_pTimer;
+ 
+@@ -362,7 +362,7 @@ private:
+    };
+    std::list<CRL> m_lRendezvousID;      // The sockets currently in rendezvous mode
+ 
+-   pthread_mutex_t m_RIDVectorLock;
++   udt_pthread_mutex_t m_RIDVectorLock;
+ };
+ 
+ class CSndQueue
+@@ -397,24 +397,24 @@ public:
+    int sendto(const sockaddr* addr, CPacket& packet);
+ 
+ private:
+-#ifndef WIN32
++#ifndef WINDOWS
+    static void* worker(void* param);
+ #else
+    static DWORD WINAPI worker(LPVOID param);
+ #endif
+ 
+-   pthread_t m_WorkerThread;
++   udt_pthread_t m_WorkerThread;
+ 
+ private:
+    CSndUList* m_pSndUList;		// List of UDT instances for data sending
+    CChannel* m_pChannel;                // The UDP channel for data sending
+    CTimer* m_pTimer;			// Timing facility
+ 
+-   pthread_mutex_t m_WindowLock;
+-   pthread_cond_t m_WindowCond;
++   udt_pthread_mutex_t m_WindowLock;
++   udt_pthread_cond_t m_WindowCond;
+ 
+    volatile bool m_bClosing;		// closing the worker
+-   pthread_cond_t m_ExitCond;
++   udt_pthread_cond_t m_ExitCond;
+ 
+ private:
+    CSndQueue(const CSndQueue&);
+@@ -457,13 +457,13 @@ public:
+    int recvfrom(int32_t id, CPacket& packet);
+ 
+ private:
+-#ifndef WIN32
++#ifndef WINDOWS
+    static void* worker(void* param);
+ #else
+    static DWORD WINAPI worker(LPVOID param);
+ #endif
+ 
+-   pthread_t m_WorkerThread;
++   udt_pthread_t m_WorkerThread;
+ 
+ private:
+    CUnitQueue m_UnitQueue;		// The received packet queue
+@@ -476,7 +476,7 @@ private:
+    int m_iPayloadSize;                  // packet payload size
+ 
+    volatile bool m_bClosing;            // closing the workder
+-   pthread_cond_t m_ExitCond;
++   udt_pthread_cond_t m_ExitCond;
+ 
+ private:
+    int setListener(CUDT* u);
+@@ -492,16 +492,16 @@ private:
+    void storePkt(int32_t id, CPacket* pkt);
+ 
+ private:
+-   pthread_mutex_t m_LSLock;
++   udt_pthread_mutex_t m_LSLock;
+    CUDT* m_pListener;                                   // pointer to the (unique, if any) listening UDT entity
+    CRendezvousQueue* m_pRendezvousQueue;                // The list of sockets in rendezvous mode
+ 
+    std::vector<CUDT*> m_vNewEntry;                      // newly added entries, to be inserted
+-   pthread_mutex_t m_IDLock;
++   udt_pthread_mutex_t m_IDLock;
+ 
+    std::map<int32_t, std::queue<CPacket*> > m_mBuffer;	// temporary buffer for rendezvous connection request
+-   pthread_mutex_t m_PassLock;
+-   pthread_cond_t m_PassCond;
++   udt_pthread_mutex_t m_PassLock;
++   udt_pthread_cond_t m_PassCond;
+ 
+ private:
+    CRcvQueue(const CRcvQueue&);
+diff --git a/JavaLauncherApp/src/udt/udt.h b/JavaLauncherApp/src/udt/udt.h
+index 24645e1..b8075fd 100644
+--- a/JavaLauncherApp/src/udt/udt.h
++++ b/JavaLauncherApp/src/udt/udt.h
+@@ -42,15 +42,13 @@ written by
+ #define __UDT_H__
+ 
+ 
+-#ifndef WIN32
++#ifndef WINDOWS
+    #include <sys/types.h>
+    #include <sys/socket.h>
+    #include <netinet/in.h>
+ #else
+-   #ifdef __MINGW__
+-      #include <stdint.h>
+-      #include <ws2tcpip.h>
+-   #endif
++   #include <stdint.h>
++   #include <ws2tcpip.h>
+    #include <windows.h>
+ #endif
+ #include <fstream>
+@@ -61,50 +59,16 @@ written by
+ 
+ ////////////////////////////////////////////////////////////////////////////////
+ 
+-//if compiling on VC6.0 or pre-WindowsXP systems
+-//use -DLEGACY_WIN32
+-
+-//if compiling with MinGW, it only works on XP or above
+-//use -D_WIN32_WINNT=0x0501
+-
+-
+-#ifdef WIN32
+-   #ifndef __MINGW__
+-      // Explicitly define 32-bit and 64-bit numbers
+-      typedef __int32 int32_t;
+-      typedef __int64 int64_t;
+-      typedef unsigned __int32 uint32_t;
+-      #ifndef LEGACY_WIN32
+-         typedef unsigned __int64 uint64_t;
+-      #else
+-         // VC 6.0 does not support unsigned __int64: may cause potential problems.
+-         typedef __int64 uint64_t;
+-      #endif
+-
+-      #ifdef UDT_EXPORTS
+-         #define UDT_API __declspec(dllexport)
+-      #else
+-         #define UDT_API __declspec(dllimport)
+-      #endif
+-   #else
+-      #define UDT_API
+-   #endif
++#ifdef WINDOWS
++  typedef SOCKET SYSSOCKET;
++  #define UDT_API
+ #else
++   typedef int SYSSOCKET;
+    #define UDT_API __attribute__ ((visibility("default")))
+ #endif
+ 
+ #define NO_BUSY_WAITING
+ 
+-#ifdef WIN32
+-   #ifndef __MINGW__
+-      typedef SOCKET SYSSOCKET;
+-   #else
+-      typedef int SYSSOCKET;
+-   #endif
+-#else
+-   typedef int SYSSOCKET;
+-#endif
+-
+ typedef SYSSOCKET UDPSOCKET;
+ typedef int UDTSOCKET;
+ 
+diff --git a/JavaLauncherApp/src/udt/udtCommon.cpp b/JavaLauncherApp/src/udt/udtCommon.cpp
+index 300f2b9..cfce287 100644
+--- a/JavaLauncherApp/src/udt/udtCommon.cpp
++++ b/JavaLauncherApp/src/udt/udtCommon.cpp
+@@ -39,19 +39,17 @@ written by
+ *****************************************************************************/
+ 
+ 
+-#ifndef WIN32
++#ifndef WINDOWS
+    #include <cstring>
+    #include <cerrno>
+    #include <unistd.h>
+-   #ifdef OSX
++   #ifdef MACOSX
+       #include <mach/mach_time.h>
+    #endif
+ #else
+    #include <winsock2.h>
+    #include <ws2tcpip.h>
+-   #ifdef LEGACY_WIN32
+-      #include <wspiapi.h>
+-   #endif
++   #include <wspiapi.h>
+ #endif
+ 
+ #include <cmath>
+@@ -60,12 +58,12 @@ written by
+ 
+ bool CTimer::m_bUseMicroSecond = false;
+ uint64_t CTimer::s_ullCPUFrequency = CTimer::readCPUFrequency();
+-#ifndef WIN32
+-   pthread_mutex_t CTimer::m_EventLock = PTHREAD_MUTEX_INITIALIZER;
+-   pthread_cond_t CTimer::m_EventCond = PTHREAD_COND_INITIALIZER;
++#ifndef WINDOWS
++   udt_pthread_mutex_t CTimer::m_EventLock = PTHREAD_MUTEX_INITIALIZER;
++   udt_pthread_cond_t CTimer::m_EventCond = PTHREAD_COND_INITIALIZER;
+ #else
+-   pthread_mutex_t CTimer::m_EventLock = CreateMutex(NULL, false, NULL);
+-   pthread_cond_t CTimer::m_EventCond = CreateEvent(NULL, false, false, NULL);
++   udt_pthread_mutex_t CTimer::m_EventLock = CreateMutex(NULL, false, NULL);
++   udt_pthread_cond_t CTimer::m_EventCond = CreateEvent(NULL, false, false, NULL);
+ #endif
+ 
+ CTimer::CTimer():
+@@ -73,7 +71,7 @@ m_ullSchedTime(),
+ m_TickCond(),
+ m_TickLock()
+ {
+-   #ifndef WIN32
++   #ifndef WINDOWS
+       pthread_mutex_init(&m_TickLock, NULL);
+       pthread_cond_init(&m_TickCond, NULL);
+    #else
+@@ -84,7 +82,7 @@ m_TickLock()
+ 
+ CTimer::~CTimer()
+ {
+-   #ifndef WIN32
++   #ifndef WINDOWS
+       pthread_mutex_destroy(&m_TickLock);
+       pthread_cond_destroy(&m_TickCond);
+    #else
+@@ -101,7 +99,7 @@ void CTimer::rdtsc(uint64_t &x)
+       return;
+    }
+ 
+-   #ifdef IA32
++   #if defined(LINUX) && defined(I386)
+       uint32_t lval, hval;
+       //asm volatile ("push %eax; push %ebx; push %ecx; push %edx");
+       //asm volatile ("xor %eax, %eax; cpuid");
+@@ -109,21 +107,19 @@ void CTimer::rdtsc(uint64_t &x)
+       //asm volatile ("pop %edx; pop %ecx; pop %ebx; pop %eax");
+       x = hval;
+       x = (x << 32) | lval;
+-   #elif defined(IA64)
+-      asm ("mov %0=ar.itc" : "=r"(x) :: "memory");
+-   #elif defined(AMD64)
++   #elif defined(LINUX) && defined(AMD64)
+       uint32_t lval, hval;
+       asm ("rdtsc" : "=a" (lval), "=d" (hval));
+       x = hval;
+       x = (x << 32) | lval;
+-   #elif defined(WIN32)
+-      //HANDLE hCurThread = ::GetCurrentThread(); 
+-      //DWORD_PTR dwOldMask = ::SetThreadAffinityMask(hCurThread, 1); 
++   #elif defined(WINDOWS)
++      //HANDLE hCurThread = ::GetCurrentThread();
++      //DWORD_PTR dwOldMask = ::SetThreadAffinityMask(hCurThread, 1);
+       BOOL ret = QueryPerformanceCounter((LARGE_INTEGER *)&x);
+       //SetThreadAffinityMask(hCurThread, dwOldMask);
+       if (!ret)
+          x = getTime() * s_ullCPUFrequency;
+-   #elif defined(OSX)
++   #elif defined(MACOSX)
+       x = mach_absolute_time();
+    #else
+       // use system call to read time clock for other archs
+@@ -135,7 +131,7 @@ uint64_t CTimer::readCPUFrequency()
+ {
+    uint64_t frequency = 1;  // 1 tick per microsecond.
+ 
+-   #if defined(IA32) || defined(IA64) || defined(AMD64)
++   #if defined(LINUX) && (defined(I386) || defined(AMD64))
+       uint64_t t1, t2;
+ 
+       rdtsc(t1);
+@@ -147,11 +143,11 @@ uint64_t CTimer::readCPUFrequency()
+ 
+       // CPU clocks per microsecond
+       frequency = (t2 - t1) / 100000;
+-   #elif defined(WIN32)
++   #elif defined(WINDOWS)
+       int64_t ccf;
+       if (QueryPerformanceFrequency((LARGE_INTEGER *)&ccf))
+          frequency = ccf / 1000000;
+-   #elif defined(OSX)
++   #elif defined(MACOSX)
+       mach_timebase_info_data_t info;
+       mach_timebase_info(&info);
+       frequency = info.denom * 1000ULL / info.numer;
+@@ -191,15 +187,13 @@ void CTimer::sleepto(uint64_t nexttime)
+    while (t < m_ullSchedTime)
+    {
+       #ifndef NO_BUSY_WAITING
+-         #ifdef IA32
++         #if defined(LINUX) && defined(I386)
+             __asm__ volatile ("pause; rep; nop; nop; nop; nop; nop;");
+-         #elif IA64
+-            __asm__ volatile ("nop 0; nop 0; nop 0; nop 0; nop 0;");
+-         #elif AMD64
++         #elif defined(LINUX) && defined(AMD64)
+             __asm__ volatile ("nop; nop; nop; nop; nop;");
+          #endif
+       #else
+-         #ifndef WIN32
++         #ifndef WINDOWS
+             timeval now;
+             timespec timeout;
+             gettimeofday(&now, 0);
+@@ -234,7 +228,7 @@ void CTimer::interrupt()
+ 
+ void CTimer::tick()
+ {
+-   #ifndef WIN32
++   #ifndef WINDOWS
+       pthread_cond_signal(&m_TickCond);
+    #else
+       SetEvent(m_TickCond);
+@@ -249,32 +243,32 @@ uint64_t CTimer::getTime()
+    //return x / s_ullCPUFrequency;
+    //Specific fix may be necessary if rdtsc is not available either.
+ 
+-   #ifndef WIN32
++   #ifndef WINDOWS
+       timeval t;
+       gettimeofday(&t, 0);
+       return t.tv_sec * 1000000ULL + t.tv_usec;
+    #else
+       LARGE_INTEGER ccf;
+-      HANDLE hCurThread = ::GetCurrentThread(); 
++      HANDLE hCurThread = ::GetCurrentThread();
+       DWORD_PTR dwOldMask = ::SetThreadAffinityMask(hCurThread, 1);
+       if (QueryPerformanceFrequency(&ccf))
+       {
+          LARGE_INTEGER cc;
+          if (QueryPerformanceCounter(&cc))
+          {
+-            SetThreadAffinityMask(hCurThread, dwOldMask); 
++            SetThreadAffinityMask(hCurThread, dwOldMask);
+             return (cc.QuadPart * 1000000ULL / ccf.QuadPart);
+          }
+       }
+ 
+-      SetThreadAffinityMask(hCurThread, dwOldMask); 
++      SetThreadAffinityMask(hCurThread, dwOldMask);
+       return GetTickCount() * 1000ULL;
+    #endif
+ }
+ 
+ void CTimer::triggerEvent()
+ {
+-   #ifndef WIN32
++   #ifndef WINDOWS
+       pthread_cond_signal(&m_EventCond);
+    #else
+       SetEvent(m_EventCond);
+@@ -283,7 +277,7 @@ void CTimer::triggerEvent()
+ 
+ void CTimer::waitForEvent()
+ {
+-   #ifndef WIN32
++   #ifndef WINDOWS
+       timeval now;
+       timespec timeout;
+       gettimeofday(&now, 0);
+@@ -307,7 +301,7 @@ void CTimer::waitForEvent()
+ 
+ void CTimer::sleep()
+ {
+-   #ifndef WIN32
++   #ifndef WINDOWS
+       usleep(10);
+    #else
+       Sleep(1);
+@@ -317,11 +311,11 @@ void CTimer::sleep()
+ 
+ //
+ // Automatically lock in constructor
+-CGuard::CGuard(pthread_mutex_t& lock):
++CGuard::CGuard(udt_pthread_mutex_t& lock):
+ m_Mutex(lock),
+ m_iLocked()
+ {
+-   #ifndef WIN32
++   #ifndef WINDOWS
+       m_iLocked = pthread_mutex_lock(&m_Mutex);
+    #else
+       m_iLocked = WaitForSingleObject(m_Mutex, INFINITE);
+@@ -331,7 +325,7 @@ m_iLocked()
+ // Automatically unlock in destructor
+ CGuard::~CGuard()
+ {
+-   #ifndef WIN32
++   #ifndef WINDOWS
+       if (0 == m_iLocked)
+          pthread_mutex_unlock(&m_Mutex);
+    #else
+@@ -340,54 +334,54 @@ CGuard::~CGuard()
+    #endif
+ }
+ 
+-void CGuard::enterCS(pthread_mutex_t& lock)
++void CGuard::enterCS(udt_pthread_mutex_t& lock)
+ {
+-   #ifndef WIN32
++   #ifndef WINDOWS
+       pthread_mutex_lock(&lock);
+    #else
+       WaitForSingleObject(lock, INFINITE);
+    #endif
+ }
+ 
+-void CGuard::leaveCS(pthread_mutex_t& lock)
++void CGuard::leaveCS(udt_pthread_mutex_t& lock)
+ {
+-   #ifndef WIN32
++   #ifndef WINDOWS
+       pthread_mutex_unlock(&lock);
+    #else
+       ReleaseMutex(lock);
+    #endif
+ }
+ 
+-void CGuard::createMutex(pthread_mutex_t& lock)
++void CGuard::createMutex(udt_pthread_mutex_t& lock)
+ {
+-   #ifndef WIN32
++   #ifndef WINDOWS
+       pthread_mutex_init(&lock, NULL);
+    #else
+       lock = CreateMutex(NULL, false, NULL);
+    #endif
+ }
+ 
+-void CGuard::releaseMutex(pthread_mutex_t& lock)
++void CGuard::releaseMutex(udt_pthread_mutex_t& lock)
+ {
+-   #ifndef WIN32
++   #ifndef WINDOWS
+       pthread_mutex_destroy(&lock);
+    #else
+       CloseHandle(lock);
+    #endif
+ }
+ 
+-void CGuard::createCond(pthread_cond_t& cond)
++void CGuard::createCond(udt_pthread_cond_t& cond)
+ {
+-   #ifndef WIN32
++   #ifndef WINDOWS
+       pthread_cond_init(&cond, NULL);
+    #else
+       cond = CreateEvent(NULL, false, false, NULL);
+    #endif
+ }
+ 
+-void CGuard::releaseCond(pthread_cond_t& cond)
++void CGuard::releaseCond(udt_pthread_cond_t& cond)
+ {
+-   #ifndef WIN32
++   #ifndef WINDOWS
+       pthread_cond_destroy(&cond);
+    #else
+       CloseHandle(cond);
+@@ -401,7 +395,7 @@ m_iMajor(major),
+ m_iMinor(minor)
+ {
+    if (-1 == err)
+-      #ifndef WIN32
++      #ifndef WINDOWS
+          m_iErrno = errno;
+       #else
+          m_iErrno = GetLastError();
+@@ -524,7 +518,7 @@ const char* CUDTException::getErrorMessage()
+ 
+       case 5:
+         m_strMsg = "Operation not supported";
+- 
++
+         switch (m_iMinor)
+         {
+         case 1:
+@@ -617,7 +611,7 @@ const char* CUDTException::getErrorMessage()
+    if ((0 != m_iMajor) && (0 < m_iErrno))
+    {
+       m_strMsg += ": ";
+-      #ifndef WIN32
++      #ifndef WINDOWS
+          char errmsg[1024];
+          if (strerror_r(m_iErrno, errmsg, 1024) == 0)
+             m_strMsg += errmsg;
+@@ -630,7 +624,7 @@ const char* CUDTException::getErrorMessage()
+    }
+ 
+    // period
+-   #ifndef WIN32
++   #ifndef WINDOWS
+       m_strMsg += ".";
+    #endif
+ 
+diff --git a/JavaLauncherApp/src/udt/udtCommon.h b/JavaLauncherApp/src/udt/udtCommon.h
+index 3ecf846..a4c582a 100644
+--- a/JavaLauncherApp/src/udt/udtCommon.h
++++ b/JavaLauncherApp/src/udt/udtCommon.h
+@@ -42,27 +42,30 @@ written by
+ #define __UDT_COMMON_H__
+ 
+ 
+-#ifndef WIN32
++#ifndef WINDOWS
+    #include <sys/time.h>
+    #include <sys/uio.h>
+    #include <pthread.h>
+ #else
+-   #ifdef __MINGW__
+-      #include <stdint.h>
+-      #include <ws2tcpip.h>
+-   #endif
++   #include <stdint.h>
++   #include <ws2tcpip.h>
+    #include <windows.h>
+ #endif
+ #include <cstdlib>
+ #include "udt.h"
+ 
+ 
+-#ifdef WIN32
+-   // Windows compability
+-   typedef HANDLE pthread_t;
+-   typedef HANDLE pthread_mutex_t;
+-   typedef HANDLE pthread_cond_t;
+-   typedef DWORD pthread_key_t;
++#ifdef WINDOWS
++    // Windows compatibility
++    typedef HANDLE udt_pthread_t;
++    typedef HANDLE udt_pthread_mutex_t;
++    typedef HANDLE udt_pthread_cond_t;
++    typedef DWORD udt_pthread_key_t;
++#else
++    typedef pthread_t udt_pthread_t;
++    typedef pthread_mutex_t udt_pthread_mutex_t;
++    typedef pthread_cond_t udt_pthread_cond_t;
++    typedef pthread_key_t udt_pthread_key_t;
+ #endif
+ 
+ 
+@@ -175,10 +178,10 @@ private:
+    uint64_t m_ullSchedTime;             // next schedulled time
+ 
+    pthread_cond_t m_TickCond;
+-   pthread_mutex_t m_TickLock;
++   udt_pthread_mutex_t m_TickLock;
+ 
+-   static pthread_cond_t m_EventCond;
+-   static pthread_mutex_t m_EventLock;
++   static udt_pthread_cond_t m_EventCond;
++   static udt_pthread_mutex_t m_EventLock;
+ 
+ private:
+    static uint64_t s_ullCPUFrequency;	// CPU frequency : clock cycles per microsecond
+@@ -191,22 +194,22 @@ private:
+ class CGuard
+ {
+ public:
+-   CGuard(pthread_mutex_t& lock);
++   CGuard(udt_pthread_mutex_t& lock);
+    ~CGuard();
+ 
+ public:
+-   static void enterCS(pthread_mutex_t& lock);
+-   static void leaveCS(pthread_mutex_t& lock);
++   static void enterCS(udt_pthread_mutex_t& lock);
++   static void leaveCS(udt_pthread_mutex_t& lock);
+ 
+-   static void createMutex(pthread_mutex_t& lock);
+-   static void releaseMutex(pthread_mutex_t& lock);
++   static void createMutex(udt_pthread_mutex_t& lock);
++   static void releaseMutex(udt_pthread_mutex_t& lock);
+ 
+-   static void createCond(pthread_cond_t& cond);
+-   static void releaseCond(pthread_cond_t& cond);
++   static void createCond(udt_pthread_cond_t& cond);
++   static void releaseCond(udt_pthread_cond_t& cond);
+ 
+ private:
+-   pthread_mutex_t& m_Mutex;            // Alias name of the mutex to be protected
+-   int m_iLocked;                       // Locking status
++   udt_pthread_mutex_t& m_Mutex;        // Alias name of the mutex to be protected
++   unsigned int m_iLocked;              // Locking status
+ 
+    CGuard& operator=(const CGuard&);
+ };
+diff --git a/JavaLauncherApp/src/udt/window.cpp b/JavaLauncherApp/src/udt/window.cpp
+index bca37e9..94e9711 100644
+--- a/JavaLauncherApp/src/udt/window.cpp
++++ b/JavaLauncherApp/src/udt/window.cpp
+@@ -39,7 +39,7 @@ written by
+ *****************************************************************************/
+ 
+ #include <cmath>
+-#include "common.h"
++#include "udtCommon.h"
+ #include "window.h"
+ #include <algorithm>
+ 
+diff --git a/JavaLauncherApp/src/udt/window.h b/JavaLauncherApp/src/udt/window.h
+index f118a26..1491bd1 100644
+--- a/JavaLauncherApp/src/udt/window.h
++++ b/JavaLauncherApp/src/udt/window.h
+@@ -42,7 +42,7 @@ written by
+ #define __UDT_WINDOW_H__
+ 
+ 
+-#ifndef WIN32
++#ifndef WINDOWS
+    #include <sys/time.h>
+    #include <time.h>
+ #endif
+-- 
+1.9.1
+
