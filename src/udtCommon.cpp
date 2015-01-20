@@ -43,6 +43,7 @@ written by
    #include <cstring>
    #include <cerrno>
    #include <unistd.h>
+   #include <stdio.h>
    #ifdef MACOSX
       #include <mach/mach_time.h>
    #endif
@@ -123,7 +124,7 @@ void CTimer::rdtsc(uint64_t &x)
       x = mach_absolute_time();
    #else
       // use system call to read time clock for other archs
-      x = getTime();
+      x = getTime() * s_ullCPUFrequency;
    #endif
 }
 
@@ -131,18 +132,48 @@ uint64_t CTimer::readCPUFrequency()
 {
    uint64_t frequency = 1;  // 1 tick per microsecond.
 
-   #if defined(LINUX) && (defined(I386) || defined(AMD64))
-      uint64_t t1, t2;
+   #if defined(LINUX)
+      // extract cpu frequency from /proc/cpuinfo
+      float mhz = 0;
+      char str[256], p = NULL;
+      int find = 0;
+      FILE * fd = fopen("/proc/cpuinfo", "r");
 
-      rdtsc(t1);
-      timespec ts;
-      ts.tv_sec = 0;
-      ts.tv_nsec = 100000000;
-      nanosleep(&ts, NULL);
-      rdtsc(t2);
+      if (fd == NULL) {
+         // perror("fopen /proc/cpuinfo");
+      } else {
+         while (fgets(str, 256, fd)) {
+            if (strncmp("cpu MHz", str, sizeof("cpu MHz")-1) == 0) {
+               find = 1;
+               break;
+            }
+         }
 
-      // CPU clocks per microsecond
-      frequency = (t2 - t1) / 100000;
+         fclose(fd);
+      }
+
+      if (find) {
+         p = str;
+         while (p++ != ':');
+
+         sscanf(p, "%f", &mhz);
+         frequency = (uint64_t)mhz;
+         ///printf("linux cpu MHz: %f, %lld\n", mhz, frequency);
+      } else {
+         printf("Warning!!! /proc/cpuinfo cpu MHz unknown\n");
+         // original behavior
+         uint64_t t1, t2;
+
+         rdtsc(t1);
+         timespec ts;
+         ts.tv_sec = 0;
+         ts.tv_nsec = 100000000;
+         nanosleep(&ts, NULL);
+         rdtsc(t2);
+
+         // CPU clocks per microsecond
+         frequency = (t2 - t1) / 100000;
+      }
    #elif defined(WINDOWS)
       int64_t ccf;
       if (QueryPerformanceFrequency((LARGE_INTEGER *)&ccf))
