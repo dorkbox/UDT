@@ -1,3 +1,5 @@
+NOTE: Fixed linux timer step from patch in help thread. Also some misc fixes -- see patches.
+
 version 4.11
 
 mostly bug fixes since last version.
