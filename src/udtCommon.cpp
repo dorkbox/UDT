@@ -135,7 +135,8 @@ uint64_t CTimer::readCPUFrequency()
    #if defined(LINUX)
       // extract cpu frequency from /proc/cpuinfo
       float mhz = 0;
-      char str[256], p = NULL;
+      char str[256] = {};
+      char *p = NULL;
       int find = 0;
       FILE * fd = fopen("/proc/cpuinfo", "r");
 
@@ -153,14 +154,17 @@ uint64_t CTimer::readCPUFrequency()
       }
 
       if (find) {
+         int i=0;
+         while(str[i++] != ':');
+
          p = str;
-         while (p++ != ':');
+         p+=i;
 
          sscanf(p, "%f", &mhz);
          frequency = (uint64_t)mhz;
-         ///printf("linux cpu MHz: %f, %lld\n", mhz, frequency);
+         // printf("linux cpu MHz: %f, %lld\n", mhz, frequency);
       } else {
-         printf("Warning!!! /proc/cpuinfo cpu MHz unknown\n");
+         // printf("Warning!!! /proc/cpuinfo cpu MHz unknown\n");
          // original behavior
          uint64_t t1, t2;
 
