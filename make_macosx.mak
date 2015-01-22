@@ -13,11 +13,11 @@
 
 include make_common.mak
 
-DIST_NAME=libbarchart-udt-core-2.3.1-mod.dylib
+DIST_NAME=$(CORE_NAME).dylib
 DIST_PATH=windows_$(COMPILE_OS_ARCH)
 
 CPP=i686-apple-darwin10-g++
-CC=i686-apple-darwin10-gcc
+STRIP=i686-apple-darwin10-strip
 
 LDFLAGS = -shared -dynamiclib -compatibility_version 1.0 -current_version 1.0 -mmacosx-version-min=10.5
 LIBS = -lpthread -lm
@@ -34,8 +34,8 @@ CCFLAGS += -DMACOSX
 
 all: dist-clean udt
 	@echo "\nDONE WITH COMPILE...."
-	@mkdir -p "bin/$(DIST_OS_NAME)"
-	@mv "$(DIST_NAME)" "bin/$(DIST_OS_NAME)"
+	@mkdir -p "$(TARGET_PATH)/$(DIST_OS_NAME)"
+	@mv "$(DIST_NAME)" "$(TARGET_PATH)/$(DIST_OS_NAME)"
 	@# now cleanup
 	@$(MAKE) -s -f make_common.mak clean
 

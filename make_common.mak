@@ -8,9 +8,12 @@
 #
 ################################################################################
 
-DEPLOY_PATH=../../java_builder/ProjectBuilder/deploy
-TARGET_PATH=../../resources/JavaLauncher
+# Note that we are ONLY updating the JNI binaries, NOT THE JAVA CODE. So you will want to replace the appropriate files
+#      inside the bundle jar.
+CORE_NAME=libbarchart-udt-core-2.3.1.1
+TARGET_PATH=../../resources/Dependencies/barchart-udt
 JVM=jvm
+
 
 #setup architecture and path parameters
 ifeq ($(COMPILE_OS_ARCH),32)

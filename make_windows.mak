@@ -10,7 +10,7 @@
 
 include make_common.mak
 
-DIST_NAME=libbarchart-udt-core-2.3.1-mod.dll
+DIST_NAME=$(CORE_NAME).dll
 DIST_PATH=windows_$(COMPILE_OS_ARCH)
 
 ifeq ($(COMPILE_OS_ARCH),32)
@@ -45,7 +45,7 @@ all: dist-clean udt
 	@# now cleanup
 	@# now strip the DLL of unneeded, since it can be HUGE
 	$(STRIP) --strip-debug --strip-unneeded $(DIST_NAME)
-	@mkdir -p "bin/$(DIST_OS_NAME)"
-	@mv "$(DIST_NAME)" "bin/$(DIST_OS_NAME)"
+	@mkdir -p "$(TARGET_PATH)/$(DIST_OS_NAME)"
+	@mv "$(DIST_NAME)" "$(TARGET_PATH)/$(DIST_OS_NAME)"
 	@$(MAKE) -s -f make_common.mak clean
 
