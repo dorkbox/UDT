@@ -910,6 +910,36 @@ void CUDT::connect(const sockaddr* peer, CHandShake* hs)
    delete [] buffer;
 }
 
+void CUDT::flush() {
+
+   uint64_t entertime = CTimer::getTime();
+
+   while (!m_bBroken && m_bConnected && (m_pSndBuffer->getCurrBufSize() > 0) && (CTimer::getTime() - entertime < m_Linger.l_linger * 1000000ULL))
+   {
+    // linger has been checked by previous close() call and has expired
+    if (m_ullLingerExpiration >= entertime)
+        break;
+
+    if (!m_bSynSending)
+      {
+        // if this socket enables asynchronous sending, return immediately and let GC to close it later
+        if (0 == m_ullLingerExpiration)
+            m_ullLingerExpiration = entertime + m_Linger.l_linger * 1000000ULL;
+
+        return;
+      }
+
+      #ifndef WINDOWS
+         timespec ts;
+         ts.tv_sec = 0;
+         ts.tv_nsec = 1000000;
+         nanosleep(&ts, NULL);
+      #else
+         Sleep(1);
+      #endif
+   }
+}
+
 void CUDT::close()
 {
    if (!m_bOpened)
@@ -917,32 +947,7 @@ void CUDT::close()
 
    if (0 != m_Linger.l_onoff)
    {
-      uint64_t entertime = CTimer::getTime();
-
-      while (!m_bBroken && m_bConnected && (m_pSndBuffer->getCurrBufSize() > 0) && (CTimer::getTime() - entertime < m_Linger.l_linger * 1000000ULL))
-      {
-         // linger has been checked by previous close() call and has expired
-         if (m_ullLingerExpiration >= entertime)
-            break;
-
-         if (!m_bSynSending)
-         {
-            // if this socket enables asynchronous sending, return immediately and let GC to close it later
-            if (0 == m_ullLingerExpiration)
-               m_ullLingerExpiration = entertime + m_Linger.l_linger * 1000000ULL;
-
-            return;
-         }
-
-         #ifndef WINDOWS
-            timespec ts;
-            ts.tv_sec = 0;
-            ts.tv_nsec = 1000000;
-            nanosleep(&ts, NULL);
-         #else
-            Sleep(1);
-         #endif
-      }
+      flush();
    }
 
    // remove this socket from the snd queue

@@ -706,6 +706,25 @@ JNIEXPORT void JNICALL Java_com_barchart_udt_SocketUDT_bind0( //
 
 }
 
+JNIEXPORT void JNICALL Java_com_barchart_udt_SocketUDT_flush0( //
+        JNIEnv * const env, //
+        const jobject self //
+        ) {
+
+    const jint socketID = UDT_GetSocketID(env, self);
+
+    const int rv = UDT::flush(socketID);
+
+    if (rv == UDT::ERROR) {
+        UDT::ERRORINFO errorInfo = UDT::getlasterror();
+        UDT_ThrowExceptionUDT_ErrorInfo( //
+                env, socketID, "flush0:flush", &errorInfo);
+        return;
+    }
+
+}
+
+
 JNIEXPORT void JNICALL Java_com_barchart_udt_SocketUDT_close0( //
         JNIEnv * const env, //
         const jobject self //

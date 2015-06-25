@@ -803,6 +803,16 @@ void CUDTUnited::connect_complete(const UDTSOCKET u)
    s->m_Status = CONNECTED;
 }
 
+int CUDTUnited::flush(const UDTSOCKET u) {
+   CUDTSocket* s = locate(u);
+   if (NULL == s)
+      throw CUDTException(5, 4, 0);
+
+   s->m_pUDT->flush();
+
+   return 0;
+}
+
 int CUDTUnited::close(const UDTSOCKET u)
 {
    CUDTSocket* s = locate(u);
@@ -1717,6 +1727,24 @@ int CUDT::connect(UDTSOCKET u, const sockaddr* name, int namelen)
    }
 }
 
+int CUDT::flush(UDTSOCKET u)
+{
+   try
+   {
+      return s_UDTUnited.flush(u);
+   }
+   catch (CUDTException e)
+   {
+      s_UDTUnited.setError(new CUDTException(e));
+      return ERROR;
+   }
+   catch (...)
+   {
+      s_UDTUnited.setError(new CUDTException(-1, 0, 0));
+      return ERROR;
+   }
+}
+
 int CUDT::close(UDTSOCKET u)
 {
    try
@@ -2257,6 +2285,11 @@ UDTSOCKET accept(UDTSOCKET u, struct sockaddr* addr, int* addrlen)
 int connect(UDTSOCKET u, const struct sockaddr* name, int namelen)
 {
    return CUDT::connect(u, name, namelen);
+}
+
+int flush(UDTSOCKET u)
+{
+   return CUDT::flush(u);
 }
 
 int close(UDTSOCKET u)

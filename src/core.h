@@ -84,6 +84,7 @@ public: //API
    static int listen(UDTSOCKET u, int backlog);
    static UDTSOCKET accept(UDTSOCKET u, sockaddr* addr, int* addrlen);
    static int connect(UDTSOCKET u, const sockaddr* name, int namelen);
+   static int flush(UDTSOCKET u);
    static int close(UDTSOCKET u);
    static int getpeername(UDTSOCKET u, sockaddr* name, int* namelen);
    static int getsockname(UDTSOCKET u, sockaddr* name, int* namelen);
@@ -162,6 +163,15 @@ private:
       //    None.
 
    void connect(const sockaddr* peer, CHandShake* hs);
+
+      // Functionality:
+      //    Flush all buffered data.
+      // Parameters:
+      //    None.
+      // Returned value:
+      //    None.
+
+   void flush();
 
       // Functionality:
       //    Close the opened UDT entity.
