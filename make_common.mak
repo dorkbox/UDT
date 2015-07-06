@@ -26,7 +26,7 @@
 
 # Note that we are ONLY updating the JNI binaries, NOT THE JAVA CODE. So you will want to replace the appropriate files
 #      inside the bundle jar.
-CORE_NAME=libbarchart-udt-core-2.3.1.1
+CORE_NAME=libbarchart-udt-core-2.3.2
 TARGET_PATH=../../dorkbox/Dorkbox-Network/natives
 JVM=jvm
 

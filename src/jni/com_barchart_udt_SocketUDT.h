@@ -25,7 +25,7 @@ extern "C" {
 #define com_barchart_udt_SocketUDT_INFINITE_TTL -1L
 
 #undef com_barchart_udt_SocketUDT_SIGNATURE_JNI
-#define com_barchart_udt_SocketUDT_SIGNATURE_JNI 20130512L
+#define com_barchart_udt_SocketUDT_SIGNATURE_JNI 20150706L
 
 #undef com_barchart_udt_SocketUDT_TIMEOUT_INFINITE
 #define com_barchart_udt_SocketUDT_TIMEOUT_INFINITE -1L

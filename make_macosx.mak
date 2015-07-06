@@ -30,7 +30,7 @@
 include make_common.mak
 
 DIST_NAME=$(CORE_NAME).dylib
-DIST_PATH=windows_$(COMPILE_OS_ARCH)
+DIST_PATH=macosx_$(COMPILE_OS_ARCH)
 
 CPP=i686-apple-darwin10-g++
 STRIP=i686-apple-darwin10-strip
@@ -51,7 +51,7 @@ CCFLAGS += -DMACOSX
 all: dist-clean udt
 	@echo "\nDONE WITH COMPILE...."
 	@mkdir -p "$(TARGET_PATH)/$(DIST_OS_NAME)"
-	@mv "$(DIST_NAME)" "$(TARGET_PATH)/$(DIST_OS_NAME)"
+	mv "$(DIST_NAME)" "$(TARGET_PATH)/$(DIST_OS_NAME)"
 	@# now cleanup
 	@$(MAKE) -s -f make_common.mak clean
 

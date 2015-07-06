@@ -61,6 +61,6 @@ all: dist-clean udt
 	@# now strip the DLL of unneeded, since it can be HUGE
 	$(STRIP) --strip-debug --strip-unneeded $(DIST_NAME)
 	@mkdir -p "$(TARGET_PATH)/$(DIST_OS_NAME)"
-	@mv "$(DIST_NAME)" "$(TARGET_PATH)/$(DIST_OS_NAME)"
+	mv "$(DIST_NAME)" "$(TARGET_PATH)/$(DIST_OS_NAME)"
 	@$(MAKE) -s -f make_common.mak clean
 
