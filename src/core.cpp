@@ -199,7 +199,14 @@ CUDT::~CUDT()
    delete m_pRcvTimeWindow;
    delete m_pCCFactory;
    delete m_pCC;
-   delete m_pPeerAddr;
+
+   // make sure to properly cast before deletion
+   if (AF_INET == m_iIPversion) {
+      delete (sockaddr_in*)m_pPeerAddr;
+   } else {
+      delete (sockaddr_in6*)m_pPeerAddr;
+   }
+
    delete m_pSNode;
    delete m_pRNode;
 }
