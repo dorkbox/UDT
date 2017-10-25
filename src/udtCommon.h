@@ -177,7 +177,7 @@ private:
 private:
    uint64_t m_ullSchedTime;             // next schedulled time
 
-   pthread_cond_t m_TickCond;
+   udt_pthread_cond_t m_TickCond;
    udt_pthread_mutex_t m_TickLock;
 
    static udt_pthread_cond_t m_EventCond;
