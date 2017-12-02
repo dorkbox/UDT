@@ -1,14 +1,32 @@
+version 4.13
+
+removed java bits (after performance testing, the JNI wasn't as fast as hoped, likely because of JVM issues)
+cleaned up build
+added cmake (from Bjorn Stahl, thank you!)
+
+
+version 4.12
+
 NOTE: Fixed linux timer step from patch in help thread. Also some misc fixes -- see patches.
+
+
+---------------------------------------------------------
+The following notes are from the (no longer maintained) sourceforge repository.
+
 
 version 4.11
 
 mostly bug fixes since last version.
+
+
 
 version 4.10
 
 added UDT_SNDDATA and UDT_RCVDATA options
 fixed a bug that causes unnecessary connection timeout
 improved epoll UDT event handling
+
+
 
 version 4.9
 
@@ -19,6 +37,8 @@ improved cache code
 removed unnecessary NAK (reduced loss retransmission)
 receiver side error can unblock a blocked sender
 
+
+
 version 4.8
 
 fix a bug that may cause seg fault on concurrent close on the same socket
@@ -28,10 +48,14 @@ fix a bug that may cause accept/select to return positively when an accepted soc
 fix a bug that may cause connect to fail if the server closes listening socket immediately after accept returns
 fix recvfile fstream write status bug (e.g., when disk is full, recvfile should handle properly now)
 
+
+
 version 4.7a
 
 fix timeout bug introduced in 4.7
 initialize CHandShake
+
+
 
 version 4.7
 
