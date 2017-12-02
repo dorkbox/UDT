@@ -19,18 +19,6 @@ UDT is developed by [Yunhong Gu](http://www.linkedin.com/in/yunhong) and others 
 UDT C++ implementation is available under [BSD license](http://udt.sourceforge.net/license.html)
 
 
-### Barchart-UDT
-
-Barchart-UDT is a Java wrapper around native C++ UDT protocol implementation.
-
-Barchart-UDT is developed by Andrei Pozolotin and others at [Barchart, Inc.](http://www.barchart.com)
-
-Barchart-UDT is available under [BSD license](http://udt.sourceforge.net/license.html)
-as well.
-
-Barchart-UDT exposes UDT protocol as both [java.net.Socket](http://java.sun.com/javase/6/docs/api/java/net/Socket.html) and [java.nio.channels.SocketChannel](http://java.sun.com/javase/6/docs/api/java/nio/channels/SocketChannel.html) and comes with a [java.nio.channels.spi.SelectorProvider](http://java.sun.com/javase/6/docs/api/java/nio/channels/spi/SelectorProvider.html)
-
-
 ### Key Features
 
 **Fast**. UDT is designed for extremely high speed networks and it has been used to support global data transfer of terabyte sized data sets. UDT is the core technology in many commercial WAN acceleration products.
@@ -46,14 +34,10 @@ Barchart-UDT exposes UDT protocol as both [java.net.Socket](http://java.sun.com/
 
 ### Supported Platforms
 
-Barchart-UDT is currently used on:
-
-* Oracle JDK: 6, 7;
-  
-| ARCH/OS      |  Linux  | Mac OSX | Windows | 
+| ARCH/OS      |  Linux  | Mac OSX | Windows |
 |--------------|---------|---------|---------|
 | arm-android  |   ???   |         |         |
-| arm-rpi      |   +++   |         |         |
+| arm-rpi      |   ???   |         |         |
 | x86/i386     |   YES   |   YES   |   YES   |
 | x86-64/amd64 |   YES   |   YES   |   YES   |
 
@@ -62,6 +46,6 @@ Barchart-UDT is currently used on:
  - Updates to UDT source 4.11 to fix some misc. CPU timing bugs in Linux (via the sourceforge help forum).
  - Cleaned up source for cross-compile environment in linux
  - Cleaned up preprocessor symbols and removed deprecated
- - Strips unneded symbols, drastically reducing size
+ - Strips unneeded symbols, drastically reducing size
  - Static linking to mingw libraries for windows build
 
