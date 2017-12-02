@@ -24,10 +24,8 @@
 ######################################################################
 
 
-# Note that we are ONLY updating the JNI binaries, NOT THE JAVA CODE. So you will want to replace the appropriate files
-#      inside the bundle jar.
-CORE_NAME=libbarchart-udt-core-2.3.2
-TARGET_PATH=../../dorkbox/Dorkbox-Network/natives
+CORE_NAME=libudt-2.3.2
+TARGET_PATH=dist
 JVM=jvm
 
 
@@ -74,20 +72,14 @@ endif
 
 #common path includes
 CCFLAGS += \
--isystem$(JVM)/include \
--isystem$(JVM)/include/$(COMPILE_OS) \
 -Isrc/
 
-JNI_OBJS = com_barchart_udt_CCC.o com_barchart_udt_SocketUDT.o JNICCC.o JNICCCFactory.o JNIHelpers.o
 UDT_OBJS = api.o buffer.o cache.o ccc.o channel.o udtCommon.o core.o epoll.o list.o md5.o packet.o queue.o window.o
-
-$(JNI_OBJS): %.o: src/jni/%.cpp src/jni/%.h
-	@$(CPP) $(CCFLAGS) $< -c
 
 $(UDT_OBJS): %.o: src/%.cpp src/%.h src/udt.h
 	@$(CPP) $(CCFLAGS) $< -c
 
-lib: $(UDT_OBJS) $(JNI_OBJS)
+lib: $(UDT_OBJS)
 	@$(CPP) $(CCFLAGS) $(LDFLAGS) -o $(DIST_NAME) $^ $(LIBS)
 
 udt: lib
